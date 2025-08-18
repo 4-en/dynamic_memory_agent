@@ -30,3 +30,19 @@ where = ["src"]
 test = [
     "coverage>=7.6"
 ]
+
+[tool.coverage.run]
+branch = true
+source = ["dynamic_memory_agent"]   # your top-level package name
+omit = ["tests/*"]
+
+[tool.coverage.report]
+show_missing = true
+fail_under = 0
+
+[tool.coverage.paths]
+# Map local/CI paths so combining reports works if you ever do that
+source = [
+  "src",
+  "*/site-packages"  # optional; helpful when running installed package
+]
