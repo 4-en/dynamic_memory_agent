@@ -13,8 +13,10 @@ class DmaConfig(Config):
     # add comment to the config file by using cc_ prefix (str or callable or str(x))
     cc_hf_model: str = "The Hugging Face model to use"
     cc_hf_local_note: str = "Set hf_repo to 'local' to use a local model"
-    hf_repo: str = "Qwen/QwQ-32B-GGUF"
-    hf_file: str = "qwq-32b-q4_k_m.gguf"
+    #hf_repo: str = "Qwen/QwQ-32B-GGUF"
+    #hf_file: str = "qwq-32b-q4_k_m.gguf"
+    hf_repo: str = "unsloth/Qwen3-14B-GGUF"
+    hf_file: str = "*Q4_K_M.gguf"
     
     
     # Generator configuration
