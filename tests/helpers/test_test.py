@@ -1,4 +1,4 @@
-from dynamic_memory_agent.utils.test_util import add
+from dma.utils.test_util import add
 import unittest
 
 class TestUtil(unittest.TestCase):

@@ -24,7 +24,7 @@ where = ["src"]
 
 [project.scripts]
 # This creates a command-line entry point (optional)
-"dma-cli" = "dynamic_memory_agent.__main__:main"
+"dma-cli" = "dma.__main__:main"
 
 [project.optional-dependencies]
 test = [
@@ -33,7 +33,7 @@ test = [
 
 [tool.coverage.run]
 branch = true
-source = ["dynamic_memory_agent"]   # your top-level package name
+source = ["dma"]   # your top-level package name
 omit = ["tests/*"]
 
 [tool.coverage.report]
