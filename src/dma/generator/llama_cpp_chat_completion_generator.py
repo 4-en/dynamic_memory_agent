@@ -4,6 +4,7 @@ from dma.config import DmaConfig, get_config
 from llama_cpp import Llama, ChatCompletionRequestResponseFormat
 from enum import Enum
 import logging
+from transformers import AutoTokenizer
 
 class LlamaCppRole(Enum):
     """
@@ -39,6 +40,7 @@ class LlamaCppChatCompletionGenerator(BaseGenerator):
         
         self.model_path = self.config.hf_file
         self.hf_repo = self.config.hf_repo if self.config.hf_repo != "local" else None
+        self.tokenizer_repo = self.config.hf_tokenizer_override if self.config.hf_tokenizer_override else self.config.hf_repo
         
         
         self.model: Llama = None
@@ -77,6 +79,20 @@ class LlamaCppChatCompletionGenerator(BaseGenerator):
             self.model = Llama(self.model_path, **self._get_model_params())
         else:
             self.model = Llama.from_pretrained(self.hf_repo, self.model_path, **self._get_model_params())
+            messages = [
+                {"role": "system", "content": "You are a friendly chatbot who always responds in the style of a pirate",},
+                {"role": "user", "content": "How many helicopters can a human eat in one sitting?"}
+            ]
+            # print("Metadata:")
+            #tokenizer = AutoTokenizer.from_pretrained(self.tokenizer_repo)
+            #test = tokenizer.apply_chat_template(
+            #    messages,
+            #    add_generation_prompt=False,
+            #    tokenize=False,
+            #    continue_final_message=True
+            #)
+            #print(test)
+            # print(self.model.metadata["tokenizer.chat_template"])
 
 
     def convert_conversation_to_input(self, conversation: Conversation) -> list[dict]:
@@ -109,12 +125,12 @@ class LlamaCppChatCompletionGenerator(BaseGenerator):
     
     def convert_output_to_message(self, output:str) -> Message:
         """
-        Convert the output from the OpenAI API to a Message.
+        Convert the output from the ChatCompletion API to a Message.
         
         Parameters
         ----------
         output : str
-            The output from the OpenAI API.
+            The output from the ChatCompletion API.
         
         Returns
         -------
