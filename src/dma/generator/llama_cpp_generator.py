@@ -1,5 +1,5 @@
 from .base_generator import BaseGenerator
-from dma.core import Conversation, Message, Role
+from dma.core import Conversation, Message, Role, MessagePart, ThoughtPart, TextPart
 from dma.config import DmaConfig, get_config
 from llama_cpp import Llama, ChatCompletionRequestResponseFormat
 from enum import Enum
@@ -22,7 +22,7 @@ class LlamaCppRole(Enum):
 class LlamaCppGenerator(BaseGenerator):
     """Generator for local models that use the Llama C++ framework."""
     
-    def __init__(self, model_params:dict={}, generator_params:dict={}):
+    def __init__(self):
         """
         Initialize the Llama C++ generator.
 
@@ -40,8 +40,6 @@ class LlamaCppGenerator(BaseGenerator):
         self.model_path = self.config.hf_file
         self.hf_repo = self.config.hf_repo if self.config.hf_repo != "local" else None
         
-        self.model_params = model_params
-        self.generator_params = generator_params
         
         self.model: Llama = None
 
@@ -50,9 +48,9 @@ class LlamaCppGenerator(BaseGenerator):
         Get the model parameters.
         """
 
-        n_ctx=100000
-        flash_attn=True
-        n_gpu_layers=-1
+        n_ctx= self.config.llm_n_ctx if self.config.llm_n_ctx > 0 else 2048
+        flash_attn = self.config.llm_flash_attn if self.config.llm_flash_attn is not None else True
+        n_gpu_layers = self.config.llm_n_gpu_layers if self.config.llm_n_gpu_layers > 0 else 999
         verbose=False
 
         base_params = {
@@ -62,14 +60,7 @@ class LlamaCppGenerator(BaseGenerator):
             "verbose": verbose
         }
 
-        base_params.update(self.model_params)
         return base_params
-    
-    def _get_generator_params(self) -> dict:
-        """
-        Get the generator parameters.
-        """
-        return self.generator_params
 
     def _setup_generator(self):
         """
@@ -142,7 +133,12 @@ class LlamaCppGenerator(BaseGenerator):
                 cot = ""
 
 
-        message = Message(f"{cot}\n{output.strip()}", role=Role.ASSISTANT)
+        parts = []
+        if cot != "":
+            parts.append(ThoughtPart(thought=cot))
+        if output.strip() != "":
+            parts.append(TextPart(text=output.strip()))
+        message = Message(content=parts, role=Role.ASSISTANT)
         
         return message
         
@@ -169,9 +165,10 @@ class LlamaCppGenerator(BaseGenerator):
             output = self.model.create_chat_completion(
                 messages=input,
                 response_format=response_format,
-                **self._get_generator_params(),
-                temperature=1.0,
-                max_tokens=100
+                temperature=self.config.llm_temperature,
+                top_p=self.config.llm_top_p,
+                top_k=self.config.llm_top_k,
+                max_tokens=self.config.llm_max_tokens_gen
             )
             
             return self.convert_output_to_message(output["choices"][0]["message"]["content"])

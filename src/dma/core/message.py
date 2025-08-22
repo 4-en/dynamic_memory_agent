@@ -254,6 +254,9 @@ class Message:
         if self.content is None:
             return ""
         
+        if type(self.content) is str:
+            return self.content
+        
         if type(self.content) is list:
             return "\n".join([part.text for part in self.content if type(part) is TextPart])
         
@@ -285,10 +288,10 @@ class Message:
             return ""
         
         if type(self.content) is list:
-            return "\n".join([part.text for part in self.content if type(part) is ThoughtPart or type(part) is TextPart])
+            return "\n".join([part.thought for part in self.content if type(part) is ThoughtPart])
         
         if type(self.content) is str:
-            return self.content
+            return ""
         
         return ""
 

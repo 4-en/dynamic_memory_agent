@@ -3,6 +3,7 @@
 # the memory agent via multi turn conversations.
 
 from dma.core import Pipeline
+from dma.core import Conversation, Message, Role
 import logging
 
 
@@ -14,17 +15,22 @@ def main():
     print("Type 'exit' to quit.")
     
     pipeline = Pipeline()
+    conversation = Conversation()
     
     input_text = None
     while input_text != "exit":
         input_text = input("You: ")
         if input_text.strip().lower() == "exit":
             break
-        
-        response = pipeline(input_text)
+        input_message = Message(input_text, role=Role.USER)
+        conversation.add_message(input_message)
+        response: Message = pipeline(conversation)
         
         if response:
-            print(f"Agent: {response}")
+            reasoning = response.reasoning_text
+            reply = response.message_text
+            print(f"<Agent>\n<think>{reasoning}\n</think>\n{reply}\n")
+            conversation.add_message(response)
         else:
             print("Agent: No response generated.")
 

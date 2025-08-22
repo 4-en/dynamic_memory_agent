@@ -22,8 +22,19 @@ class DmaConfig(Config):
     # Generator configuration
     cc_llm_instruction: str = "The instruction to use for the LLM"
     llm_instruction: str = "You are a helpful assistant."
-    cc_llm_max_tokens: int = "The maximum number of tokens to generate. Set to -1 for no limit."
+    
+    cc_llm_gen_settings: int = "The settings for the underlying LLM."
     llm_max_tokens_gen: int = -1
+    llm_n_gpu_layers: int = -1
+    llm_n_ctx: int = -1
+    llm_flash_attn: bool = True
+    llm_verbose: bool = False
+    
+    cc_llm_sampling_settings: str = "The sampling settings for the LLM."
+    llm_temperature: float = 0.7
+    llm_top_p: float = 0.95
+    llm_top_k: int = 40
+    
     cc_context_injection_method: str = "The method to use for context injection. Options are 'reasoning' or 'expert'."
     context_injection_method: str = "reasoning"
 
