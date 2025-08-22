@@ -19,7 +19,7 @@ class LlamaCppRole(Enum):
     ASSISTANT = "assistant"
     SYSTEM = "system"
 
-class LlamaCppGenerator(BaseGenerator):
+class LlamaCppChatCompletionGenerator(BaseGenerator):
     """Generator for local models that use the Llama C++ framework."""
     
     def __init__(self):

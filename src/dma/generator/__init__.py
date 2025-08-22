@@ -1,2 +1,2 @@
 from .base_generator import BaseGenerator
-from .llama_cpp_generator import LlamaCppGenerator
+from .llama_cpp_chat_completion_generator import LlamaCppChatCompletionGenerator
