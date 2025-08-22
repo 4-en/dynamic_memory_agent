@@ -26,7 +26,7 @@ class DmaConfig(Config):
     cc_llm_gen_settings: int = "The settings for the underlying LLM."
     llm_max_tokens_gen: int = -1
     llm_n_gpu_layers: int = -1
-    llm_n_ctx: int = -1
+    llm_n_ctx: int = 40960
     llm_flash_attn: bool = True
     llm_verbose: bool = False
     
@@ -43,4 +43,5 @@ def get_config() -> DmaConfig:
     global _config_instance
     if _config_instance is None:
         _config_instance = DmaConfig()
+        _config_instance.load("config.cfg")
     return _config_instance

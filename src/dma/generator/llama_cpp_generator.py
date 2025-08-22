@@ -42,13 +42,15 @@ class LlamaCppGenerator(BaseGenerator):
         
         
         self.model: Llama = None
+        
+        self._setup_generator()
 
     def _get_model_params(self) -> dict:
         """
         Get the model parameters.
         """
 
-        n_ctx= self.config.llm_n_ctx if self.config.llm_n_ctx > 0 else 2048
+        n_ctx= self.config.llm_n_ctx if self.config.llm_n_ctx > 0 else 40960
         flash_attn = self.config.llm_flash_attn if self.config.llm_flash_attn is not None else True
         n_gpu_layers = self.config.llm_n_gpu_layers if self.config.llm_n_gpu_layers > 0 else 999
         verbose=False
