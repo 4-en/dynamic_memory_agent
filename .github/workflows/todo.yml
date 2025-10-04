@@ -1,0 +1,38 @@
+# A friendly name for the workflow, which will be displayed in the GitHub Actions tab.
+name: Create Issues from TODOs
+
+# This section defines the triggers for the workflow.
+on:
+  # Run the workflow on pushes to the 'main' branch.
+  push:
+    branches:
+      - main
+  # Also run on pull requests that target the 'main' branch.
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+  issues: write
+
+# A workflow run is made up of one or more jobs that can run sequentially or in parallel.
+jobs:
+  # This workflow contains a single job called "find-todos".
+  find-todos:
+    # The type of runner that the job will run on. 'ubuntu-latest' is a standard choice.
+    runs-on: ubuntu-latest
+
+    # Steps represent a sequence of tasks that will be executed as part of the job.
+    steps:
+      # Step 1: Check out your repository's code so the action can scan it.
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # Step 2: Run the 'todo-issue' action to find TODOs and create issues.
+      - name: Find TODOs and create issues
+        uses: Juulsn/todo-issue@v1.1.4
+        # The GITHUB_TOKEN is required for the action to create issues in your repository.
+        # It's a special secret automatically provided by GitHub Actions.
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
