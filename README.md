@@ -13,6 +13,36 @@ The goal is to improve accuracy, consistency, and transparency compared to state
 
 ---
 
+## Installation
+### Requirements
+- NVIDIA GPU with CUDA support (for LLM inference)
+- NVidia Container Toolkit and drivers installed
+- GPU-enabled Docker runtime
+- Docker and Docker Compose
+
+### Setup
+1. Clone the repository:
+   ```bash
+   git clone
+    cd dynamic_memory_agent
+    ```
+2. Build using make:
+   ```bash
+   make build
+   ```
+
+### Run Agent
+Start the agent with:
+```bash
+make up
+```
+
+### Build memory from data (optional)
+To initialize the memory graph from a dataset (e.g., a game wiki):
+```bash
+make build_memory DATASET_PATH=path/to/dataset.jsonl
+```
+
 ## Features
 - **Graph-based memory storage** (Neo4j planned, pluggable backend)
 - **Hybrid retrieval**: semantic similarity (FAISS or custom), recency, and usage importance
