@@ -20,7 +20,9 @@ dependencies = [
     "faiss-cpu",
     "requests>=2.32.0",
     "spacy>=3.8.7",
-    "llama_cpp_python>=0.3.16"
+    "llama_cpp_python>=0.3.16",
+    "sentence-transformers",
+    "python-dotenv>=1.1.1",
 ]
 
 [tool.setuptools]
