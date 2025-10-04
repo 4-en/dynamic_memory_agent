@@ -17,6 +17,8 @@ class DmaConfig(Config):
     #hf_file: str = "qwq-32b-q4_k_m.gguf"
     hf_repo: str = "unsloth/Qwen3-14B-GGUF"
     hf_file: str = "*Q4_K_M.gguf"
+    cc_hf_tokenizer_override: str = "The Hugging Face tokenizer override, if any"
+    hf_tokenizer_override: str = "Qwen/Qwen3-14B-FP8"
     
     
     # Generator configuration

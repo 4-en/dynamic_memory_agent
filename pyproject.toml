@@ -14,6 +14,13 @@ license = { text = "MIT" }
 requires-python = ">=3.12,<3.13"
 dependencies = [
     # list runtime dependencies here, e.g. "requests>=2.0"
+    "torch",
+    "torchvision",
+    "transformers",
+    "faiss-cpu",
+    "requests>=2.32.0",
+    "spacy>=3.8.7",
+    "llama_cpp_python>=0.3.16"
 ]
 
 [tool.setuptools]
@@ -25,24 +32,3 @@ where = ["src"]
 [project.scripts]
 # This creates a command-line entry point (optional)
 "dma-cli" = "dma.__main__:main"
-
-[project.optional-dependencies]
-test = [
-    "coverage>=7.6"
-]
-
-[tool.coverage.run]
-branch = true
-source = ["dma"]   # your top-level package name
-omit = ["tests/*"]
-
-[tool.coverage.report]
-show_missing = true
-fail_under = 0
-
-[tool.coverage.paths]
-# Map local/CI paths so combining reports works if you ever do that
-source = [
-  "src",
-  "*/site-packages"  # optional; helpful when running installed package
-]
