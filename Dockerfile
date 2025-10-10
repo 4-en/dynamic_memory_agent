@@ -35,7 +35,7 @@ ENV CMAKE_ARGS="-DGGML_CUDA=on"
 ENV CMAKE_BUILD_PARALLEL_LEVEL=8
 
 # Re-install with the source code present. All heavy dependencies are already cached.
-RUN python3 -m pip install . --break-system-packages --timeout 600
+RUN python3 -m pip install . --break-system-packages --timeout 600 --no-build-isolation --no-cache-dir
 
 
 # === STAGE 2: FINAL (Smallest possible runtime image) ===

@@ -144,4 +144,29 @@ class BaseGenerator(ABC):
         
         message = Message(content=[reasoning_part], role=Role.ASSISTANT)
         conversation.messages.append(message)
+        
+        self._reasoning_message = message
         return conversation
+
+    def clean_conversation_state(self, conversation: Conversation) -> Conversation:
+        """
+        Clean the conversation state to remove an injected context
+        and avoid duplication.
+        The generate method already returns the new Message, so the conversation
+        shouldn't include the context message.
+        
+        Parameters
+        ----------
+        conversation : Conversation
+            The conversation to clean.
+        """
+        
+        # compare last message in conversation to generated message
+        if len(conversation.messages) == 0:
+            return conversation
+        
+        # compare last message in conversation to generated message
+        if getattr(self, "_reasoning_message", None) is not None:
+            if conversation.messages[-1] == self._reasoning_message:
+                conversation.messages.pop(-1)
+                self._reasoning_message = None

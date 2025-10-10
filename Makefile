@@ -87,7 +87,7 @@ bash-db:
 venv:
 	@echo "Creating virtualenv..."
 	python3.12 -m venv .venv
-	. .venv/bin/activate; pip install -U pip; pip install -e ".[test]"
+	. .venv/bin/activate; python -m pip install -U pip; CMAKE_ARGS="-DGGML_CUDA=ON" python -m pip install -e .[test] --no-cache-dir; python -m spacy download en_core_web_sm
 
 
 # -------- Unit Test Helpers --------

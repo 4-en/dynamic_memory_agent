@@ -118,6 +118,7 @@ class LowLevelLlamaCppGenerator(BaseGenerator):
                 if isinstance(part, TextPart):
                     content_str += part.text
                 elif isinstance(part, ThoughtPart):
+                    print(f"Adding thought part: {part.thought}")
                     content_str += f"<think>{part.thought}</think>"
                     
             input_messages.append({
@@ -133,6 +134,8 @@ class LowLevelLlamaCppGenerator(BaseGenerator):
             continue_final_message = True
             if input_messages[-1]["content"].endswith("</think>"):
                 input_messages[-1]["content"] = input_messages[-1]["content"][:-len("</think>")]
+                
+            print(f"Continuing final assistant message: {input_messages[-1]['content']}")
                 
         input_str = self.tokenizer.apply_chat_template(
             input_messages,
@@ -239,7 +242,7 @@ class LowLevelLlamaCppGenerator(BaseGenerator):
         return output_message
             
         
-    def generate_response(self, conversation: Conversation, context:str=None, response_format:BaseModel=None, **kwargs) -> Message:
+    def generate(self, conversation:Conversation, context:str=None, response_format:BaseModel=None, **kwargs) -> Message:
         """
         Generate a response based on the conversation.
 
@@ -261,9 +264,19 @@ class LowLevelLlamaCppGenerator(BaseGenerator):
             The generated response message.
         """
         
+        if response_format is not None:
+            logging.warning("Response format is not supported in LowLevelLlamaCppGenerator. Ignoring.")
+            
+        if context is not None:
+            conversation = self.add_context_as_reasoning(conversation, context)
+        
         logging.info("Generating response...")
         
         message_str = self.generate_input_string(conversation)
+        
+        print("=== Input to model ===")
+        print(message_str)
+        print("======================")
         
         response = self.model(
             prompt=message_str,

@@ -1,3 +1,4 @@
+from pydantic import BaseModel
 from .base_generator import BaseGenerator
 from dma.core import Conversation, Message, Role, MessagePart, ThoughtPart, TextPart
 from dma.config import DmaConfig, get_config
@@ -166,7 +167,7 @@ class LlamaCppChatCompletionGenerator(BaseGenerator):
         return message
         
     
-    def generate(self, conversation: Conversation, json_format:bool=False) -> Message:
+    def generate(self, conversation:Conversation, context:str=None, response_format:BaseModel=None, **kwargs) -> Message:
         """Generate a response based on the conversation.
 
         Parameters
@@ -181,8 +182,13 @@ class LlamaCppChatCompletionGenerator(BaseGenerator):
         """
         if self.model is None:
             self._setup_generator()
-        t = "text" if not json_format else "json"
-        response_format = ChatCompletionRequestResponseFormat(type=t)        
+        t = "text" if response_format is None else "json"
+        response_format = ChatCompletionRequestResponseFormat(type=t)  
+        
+        if context is not None:
+            conversation = self.add_context_as_expert(conversation, context)  
+        
+            
         try:
             input = self.convert_conversation_to_input(conversation)
             output = self.model.create_chat_completion(
