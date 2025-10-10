@@ -76,8 +76,10 @@ class LlamaCppChatCompletionGenerator(BaseGenerator):
 
         logging.info("Setting up Llama C++ generator...")
         if self.hf_repo is None:
+            logging.info("Loading local model...")
             self.model = Llama(self.model_path, **self._get_model_params())
         else:
+            logging.info("Loading HuggingFace model...")
             self.model = Llama.from_pretrained(self.hf_repo, self.model_path, **self._get_model_params())
             messages = [
                 {"role": "system", "content": "You are a friendly chatbot who always responds in the style of a pirate",},
@@ -93,6 +95,9 @@ class LlamaCppChatCompletionGenerator(BaseGenerator):
             #)
             #print(test)
             # print(self.model.metadata["tokenizer.chat_template"])
+        
+        logging.info("Loaded.")
+        
 
 
     def convert_conversation_to_input(self, conversation: Conversation) -> list[dict]:

@@ -30,8 +30,9 @@ COPY config.cfg .
 
 #RUN python3 -m pip install . --no-deps --no-build-isolation --break-system-packages --timeout 600
 
-# GGML_CUDA=on for llama-cpp-python with CUDA support
-ENV GGML_CUDA=on
+# CMake args to enable CUDA support in ggml
+ENV CMAKE_ARGS="-DGGML_CUDA=on"
+ENV CMAKE_BUILD_PARALLEL_LEVEL=8
 
 # Re-install with the source code present. All heavy dependencies are already cached.
 RUN python3 -m pip install . --break-system-packages --timeout 600
