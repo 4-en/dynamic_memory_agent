@@ -2,7 +2,7 @@ from dma.core import Conversation, Message, Role, Memory
 from dma.config import DmaConfig, get_config
 
 #from dma.evaluator import BaseEvaluator
-from dma.generator import LlamaCppChatCompletionGenerator
+from dma.generator import LowLevelLlamaCppGenerator
 #from dma.retriever import BaseRetriever
 #from dma.utils import get_storage_location
 import os
@@ -73,7 +73,7 @@ class Pipeline:
             load_dotenv(dotenv_path)
         
         # placeholders for components
-        self.generator = LlamaCppChatCompletionGenerator()
+        self.generator = LowLevelLlamaCppGenerator()
         self.evaluator = None
         self.retriever = None
         self.config = get_config()
