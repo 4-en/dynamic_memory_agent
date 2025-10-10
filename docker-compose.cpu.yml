@@ -1,0 +1,5 @@
+services:
+  app:
+    build:
+      target: final-cpu
+    image: myproject:cpu

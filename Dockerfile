@@ -1,25 +1,57 @@
-# === STAGE 1: BUILDER (Heavy lifting and compilation) ===
-# TODO: Uncomment the builder stage and copy from it to reduce final image size
-# for actual deployment, if needed.
-#FROM nvidia/cuda:13.0.1-devel-ubuntu24.04 AS builder
-FROM nvidia/cuda:13.0.1-devel-ubuntu24.04
+# syntax=docker/dockerfile:1
 
-# Set environment variables
-ENV PYTHONUNBUFFERED=1 \
-    PIP_NO_CACHE_DIR=1 \
-    APP_HOME=/app
+########## CUDA PATH ##########
+FROM nvidia/cuda:13.0.1-devel-ubuntu24.04 AS builder-cuda
 
-# 1. Install Python 3, pip, and other necessary build dependencies
-RUN apt-get update && \
-    DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-        python3 \
-        python3-pip \
-        # Add 'build-essential' or any other non-Python dependencies required for your package
-        # e.g., git, libatlas-base-dev
-    && rm -rf /var/lib/apt/lists/*
-
+ENV PYTHONUNBUFFERED=1 PIP_NO_CACHE_DIR=1 APP_HOME=/app
+RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+      python3.12 python3-pip build-essential cmake git && \
+    rm -rf /var/lib/apt/lists/*
 WORKDIR ${APP_HOME}
 
+# Copy sources
+COPY pyproject.toml ./
+COPY src/ ./src/
+COPY README.md .
+COPY LICENSE .
+COPY config.cfg .
+
+# Enable CUDA in ggml
+ENV CMAKE_ARGS="CMAKE_BUILD_PARALLEL_LEVEL=8"
+
+ENV CMAKE_ARGS="-DGGML_CUDA=ON \
+ -DLLAMA_BUILD_EXAMPLES=OFF \
+ -DLLAMA_BUILD_TESTS=OFF \
+ -DLLAMA_BUILD_SERVER=OFF \
+ -DLLAMA_BUILD_TOOLS=OFF \
+ -DCMAKE_CUDA_ARCHITECTURES=86\;89\;90\;110\;120"
+
+# ENV CMAKE_EXE_LINKER_FLAGS="-Wl,-rpath-link,/usr/local/cuda/targets/x86_64-linux/lib/stubs -L/usr/local/cuda/targets/x86_64-linux/lib/stubs -lcuda"
+# (optional but often helpful)
+#ENV CMAKE_SHARED_LINKER_FLAGS="-Wl,-rpath-link,/usr/local/cuda/targets/x86_64-linux/lib/stubs"
+
+
+RUN python3 -m pip install . --no-cache-dir --timeout 600 --break-system-packages
+
+FROM nvidia/cuda:13.0.1-runtime-ubuntu24.04 AS final-cuda
+ENV APP_HOME=/app
+RUN groupadd --system appuser && useradd --system -g appuser appuser
+WORKDIR ${APP_HOME}
+COPY --from=builder-cuda /usr/local/lib/python*/dist-packages/ /usr/local/lib/python*/dist-packages/
+COPY --from=builder-cuda /usr/local/lib/python*/site-packages/ /usr/local/lib/python*/site-packages/
+COPY --from=builder-cuda ${APP_HOME} ${APP_HOME}
+RUN python3 -m pip install spacy --no-cache-dir --break-system-packages && python3 -m spacy download en_core_web_sm --break-system-packages
+USER appuser
+CMD ["python3", "-m", "dma"]
+
+########## CPU PATH ##########
+FROM ubuntu:24.04 AS final-cpu
+
+ENV PYTHONUNBUFFERED=1 PIP_NO_CACHE_DIR=1 APP_HOME=/app
+RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+      python3.12 python3-pip build-essential cmake git && \
+    rm -rf /var/lib/apt/lists/*
+WORKDIR ${APP_HOME}
 
 COPY pyproject.toml ./
 COPY src/ ./src/
@@ -27,42 +59,21 @@ COPY README.md .
 COPY LICENSE .
 COPY config.cfg .
 
+# Disable CUDA in ggml
+ENV CMAKE_ARGS="-DGGML_CUDA=OFF" CMAKE_BUILD_PARALLEL_LEVEL=8
+RUN python3 -m pip install . --no-cache-dir --timeout 600 --break-system-packages
 
-#RUN python3 -m pip install . --no-deps --no-build-isolation --break-system-packages --timeout 600
+#FROM ubuntu:24.04 AS final-cpu
+#ENV APP_HOME=/app
+#RUN groupadd --system appuser && useradd --system -g appuser appuser
+#WORKDIR ${APP_HOME}
+#COPY --from=builder-cpu /usr/local/bin/python3* /usr/local/bin/
+#COPY --from=builder-cpu /usr/local/lib/python*/dist-packages/ /usr/local/lib/python*/dist-packages/
+#COPY --from=builder-cpu /usr/local/lib/python*/site-packages/ /usr/local/lib/python*/site-packages/
+#COPY --from=builder-cpu ${APP_HOME} ${APP_HOME}
 
-# CMake args to enable CUDA support in ggml
-ENV CMAKE_ARGS="-DGGML_CUDA=on"
-ENV CMAKE_BUILD_PARALLEL_LEVEL=8
 
-# Re-install with the source code present. All heavy dependencies are already cached.
-RUN python3 -m pip install . --break-system-packages --timeout 600 --no-build-isolation --no-cache-dir
-
-
-# === STAGE 2: FINAL (Smallest possible runtime image) ===
-# Switch to the smaller runtime image. It only has libraries, no development tools.
-#FROM nvidia/cuda:13.0.1-runtime-ubuntu24.04 AS final
-
-ENV APP_HOME=/app
-
-# Create a non-root user for security (best practice)
-RUN groupadd --system appuser && useradd --system -g appuser appuser
-# Make the application directory and set correct permissions
-#RUN mkdir ${APP_HOME} && chown -R appuser:appuser ${APP_HOME}
-RUN chown -R appuser:appuser ${APP_HOME}
-WORKDIR ${APP_HOME}
-
-# Copy the application code and *installed packages* from the builder stage
-# /usr/local/lib/python3.12/site-packages is the standard location for pip install in Ubuntu
-#COPY --from=builder /usr/local/lib/python3.12/site-packages/ /usr/local/lib/python3.12/site-packages/
-#COPY --from=builder ${APP_HOME} ${APP_HOME}
-# Copy the Spacy model data, which is in a different location
-#COPY --from=builder /usr/local/lib/python3.12/site-packages/en_core_web_sm/ /usr/local/lib/python3.12/site-packages/en_core_web_sm/
-
-# Download Spacy model
-RUN python3 -m spacy download en_core_web_sm --break-system-packages --timeout 600
-
-# Set the final user to run the application (security)
+#RUN python3 -m pip install spacy --no-cache-dir --break-system-packages && python3 -m spacy download en_core_web_sm --break-system-packages
+RUN python3 -m spacy download en_core_web_sm --break-system-packages
 USER appuser
-
-# Default: run package as a module
 CMD ["python3", "-m", "dma"]

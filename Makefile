@@ -1,10 +1,12 @@
 # -------- Settings --------
+VARIANT       ?= gpu
 DC            ?= docker compose
-COMPOSE_FILE  ?= docker-compose.yml
+COMPOSE_FILES = -f docker-compose.yml -f docker-compose.$(VARIANT).yml
 PROJECT_NAME  ?= $(notdir $(CURDIR))
 
 APP_SERVICE   ?= app
 DB_SERVICE    ?= neo4j
+
 
 # Pass extra args like: make up ARGS="--build"
 ARGS          ?=
@@ -38,50 +40,50 @@ help:
 
 # -------- Compose wrappers --------
 build:
-	$(DC) -p $(PROJECT_NAME) -f $(COMPOSE_FILE) build $(ARGS)
+	$(DC) -p $(PROJECT_NAME) $(COMPOSE_FILES) build
 
 rebuild:
-	$(DC) -p $(PROJECT_NAME) -f $(COMPOSE_FILE) build --no-cache $(ARGS)
+	$(DC) -p $(PROJECT_NAME) $(COMPOSE_FILES) build --no-cache $(ARGS)
 
 up:
-	$(DC) -p $(PROJECT_NAME) -f $(COMPOSE_FILE) up -d $(ARGS)
+	$(DC) -p $(PROJECT_NAME) $(COMPOSE_FILES) up -d $(ARGS)
 
 down:
-	$(DC) -p $(PROJECT_NAME) -f $(COMPOSE_FILE) down $(ARGS)
+	$(DC) -p $(PROJECT_NAME) $(COMPOSE_FILES) down $(ARGS)
 
 stop:
-	$(DC) -p $(PROJECT_NAME) -f $(COMPOSE_FILE) stop
+	$(DC) -p $(PROJECT_NAME) $(COMPOSE_FILES) stop
 
 start:
-	$(DC) -p $(PROJECT_NAME) -f $(COMPOSE_FILE) start
+	$(DC) -p $(PROJECT_NAME) $(COMPOSE_FILES) start
 
 restart:
-	$(DC) -p $(PROJECT_NAME) -f $(COMPOSE_FILE) restart
+	$(DC) -p $(PROJECT_NAME) $(COMPOSE_FILES) restart
 
 ps:
-	$(DC) -p $(PROJECT_NAME) -f $(COMPOSE_FILE) ps
+	$(DC) -p $(PROJECT_NAME) $(COMPOSE_FILES) ps
 
 logs:
-	$(DC) -p $(PROJECT_NAME) -f $(COMPOSE_FILE) logs -f
+	$(DC) -p $(PROJECT_NAME) $(COMPOSE_FILES) logs -f
 
 logs-app:
-	$(DC) -p $(PROJECT_NAME) -f $(COMPOSE_FILE) logs -f $(APP_SERVICE)
+	$(DC) -p $(PROJECT_NAME) $(COMPOSE_FILES) logs -f $(APP_SERVICE)
 
 logs-db:
-	$(DC) -p $(PROJECT_NAME) -f $(COMPOSE_FILE) logs -f $(DB_SERVICE)
+	$(DC) -p $(PROJECT_NAME) $(COMPOSE_FILES) logs -f $(DB_SERVICE)
 
 # -------- Exec / Shell helpers --------
 shell-app:
-	$(DC) -p $(PROJECT_NAME) -f $(COMPOSE_FILE) exec $(APP_SERVICE) /bin/sh
+	$(DC) -p $(PROJECT_NAME) $(COMPOSE_FILES) exec $(APP_SERVICE) /bin/sh
 
 bash-app:
-	$(DC) -p $(PROJECT_NAME) -f $(COMPOSE_FILE) exec $(APP_SERVICE) /bin/bash
+	$(DC) -p $(PROJECT_NAME) $(COMPOSE_FILES) exec $(APP_SERVICE) /bin/bash
 
 shell-db:
-	$(DC) -p $(PROJECT_NAME) -f $(COMPOSE_FILE) exec $(DB_SERVICE) /bin/sh
+	$(DC) -p $(PROJECT_NAME) $(COMPOSE_FILES) exec $(DB_SERVICE) /bin/sh
 
 bash-db:
-	$(DC) -p $(PROJECT_NAME) -f $(COMPOSE_FILE) exec $(DB_SERVICE) /bin/bash
+	$(DC) -p $(PROJECT_NAME) $(COMPOSE_FILES) exec $(DB_SERVICE) /bin/bash
 
 # -------- Virtualenv helpers --------
 venv:
@@ -109,24 +111,24 @@ coverage:
 
 test:
 	@echo "Running tests in Docker..."
-	$(DC) -p $(PROJECT_NAME) -f $(COMPOSE_FILE) run --rm $(APP_SERVICE) \
+	$(DC) -p $(PROJECT_NAME) $(COMPOSE_FILES) run --rm $(APP_SERVICE) \
 		python -m unittest discover -s tests -p "*.py" $(ARGS)
 
 # Generic: make exec S=app C="env"
 exec:
-	$(DC) -p $(PROJECT_NAME) -f $(COMPOSE_FILE) exec $${S:?Set S=<service>} sh -lc $${C:?Set C='<command>'}
+	$(DC) -p $(PROJECT_NAME) $(COMPOSE_FILES) exec $${S:?Set S=<service>} sh -lc $${C:?Set C='<command>'}
 
 # Convenience aliases
 exec-app:
-	$(DC) -p $(PROJECT_NAME) -f $(COMPOSE_FILE) exec $(APP_SERVICE) sh -lc $${C:?Set C='<command>'}
+	$(DC) -p $(PROJECT_NAME) $(COMPOSE_FILES) exec $(APP_SERVICE) sh -lc $${C:?Set C='<command>'}
 
 exec-db:
-	$(DC) -p $(PROJECT_NAME) -f $(COMPOSE_FILE) exec $(DB_SERVICE) sh -lc $${C:?Set C='<command>'}
+	$(DC) -p $(PROJECT_NAME) $(COMPOSE_FILES) exec $(DB_SERVICE) sh -lc $${C:?Set C='<command>'}
 
 # -------- Neo4j helpers --------
 # Usage: make cypher C="MATCH (n) RETURN count(n);"
 cypher:
-	$(DC) -p $(PROJECT_NAME) -f $(COMPOSE_FILE) exec -e NEO4J_AUTH -T $(DB_SERVICE) \
+	$(DC) -p $(PROJECT_NAME) $(COMPOSE_FILES) exec -e NEO4J_AUTH -T $(DB_SERVICE) \
 		bash -lc "printf '%s\n' $${C:?Set C='<cypher query>'} | cypher-shell -u $${NEO4J_AUTH%%/*} -p $${NEO4J_AUTH##*/}"
 
 db-browser:
@@ -137,4 +139,14 @@ clean: down
 	@echo "Containers removed (volumes kept)."
 
 prune:
-	$(DC) -p $(PROJECT_NAME) -f $(COMPOSE_FILE) down -v
+	$(DC) -p $(PROJECT_NAME) $(COMPOSE_FILES) down -v
+
+# aliases
+build-cpu: ; $(MAKE) build VARIANT=cpu
+build-gpu: ; $(MAKE) build VARIANT=gpu
+rebuild-cpu: ; $(MAKE) rebuild VARIANT=cpu
+rebuild-gpu: ; $(MAKE) rebuild VARIANT=gpu
+up-cpu:    ; $(MAKE) up VARIANT=cpu
+up-gpu:    ; $(MAKE) up VARIANT=gpu
+down-cpu:  ; $(MAKE) down VARIANT=cpu
+down-gpu:  ; $(MAKE) down VARIANT=gpu
