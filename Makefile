@@ -87,7 +87,13 @@ bash-db:
 venv:
 	@echo "Creating virtualenv..."
 	python3.12 -m venv .venv
-	. .venv/bin/activate; python -m pip install -U pip; CMAKE_ARGS="-DGGML_CUDA=ON" python -m pip install -e .[test] --no-cache-dir; python -m spacy download en_core_web_sm
+	@echo "Activating virtualenv and upgrading pip..."
+	. .venv/bin/activate && python -m pip install -U pip
+	@echo "Installing package with CUDA support..."
+	. .venv/bin/activate && CMAKE_ARGS="-DGGML_CUDA=ON" python -m pip install -e .[test] --no-cache-dir
+	@echo "Downloading spaCy model..."
+	. .venv/bin/activate && python -m spacy download en_core_web_sm
+	@echo "Virtual environment setup complete!"
 
 
 # -------- Unit Test Helpers --------
