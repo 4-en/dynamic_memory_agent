@@ -2,6 +2,8 @@ from dataclasses import dataclass, field
 from json import loads, dumps
 import os
 import logging
+from .config_path import get_config_path, get_first_existing_path
+from pathlib import Path
 
 class Config:
     """
@@ -29,7 +31,7 @@ class Config:
     Other attributes are considered public and will be saved and loaded.
     """
     
-    def __init__(self, file_name="config.cfg", attributes=None):
+    def __init__(self, file_name=None, attributes=None):
         """
         Initialize the configuration object.
         This can either be used by inheriting from this class or by creating an instance of this class and passing the attributes as a dictionary.
@@ -44,13 +46,19 @@ class Config:
         """
         super().__init__()
         
+        if file_name:
+            if (not "/" in file_name) and (not "\\" in file_name):
+                # if no path is given, we try to find a config path
+                config_path = get_config_path()
+                file_name = str(config_path.parent / file_name)
+        
         self.__file_name = file_name
         if attributes:
             for key, value in attributes.items():
                 if not hasattr(self, key):
                     setattr(self, key, value)
         
-    def load(self, file_name, create_if_missing=True, prioritize_environment=False):
+    def load(self, file_name=None, create_if_missing=True, prioritize_environment=False):
         """
         Load the configuration from the file.
         
@@ -71,25 +79,40 @@ class Config:
         """
         fields = {}
         
+        if file_name:
+            if (not "/" in file_name) and (not "\\" in file_name):
+                # if no path is given, we try to find a config path
+                config_path = get_config_path()
+                file_name = str(config_path.parent / file_name)
+        
         if hasattr(self, "__file_name"):
             file_name = file_name or self.__file_name or "config.cfg"
         else:
             file_name = file_name or "config.cfg"
             self.__file_name = file_name
             
+        if file_name == "config.cfg":
+            logging.warning("Using default config file name 'config.cfg'. It's recommended to specify a config file name or path.")
+            
+        read_file_name = get_first_existing_path([Path(file_name), Path(self.__file_name), Path("./" + Path(file_name).name)])
+            
+        didnt_exist = False
         if not os.path.exists(file_name):
+            didnt_exist = True
             if create_if_missing:
                 logging.info(f"File {file_name} does not exist. Creating a new one.")
                 self.save(file_name)
             else:
                 logging.warning(f"File {file_name} does not exist.")
+
+        if not read_file_name:
             return self
             
         annotations = getattr(self, "__annotations__", {})
         has_annotations = bool(annotations)
         
         
-        with open(file_name, "r") as file:
+        with open(read_file_name, "r") as file:
             for line in file:
                 try:
                     line = line.strip()
@@ -165,6 +188,9 @@ class Config:
             if create_if_missing:
                 logging.warning("Regenerating default values for missing fields...")
                 self.save(file_name)
+        elif didnt_exist and create_if_missing:
+            logging.info(f"Created new configuration file {file_name}.")
+            self.save(file_name)
                 
         return self
         
