@@ -1,6 +1,9 @@
 # syntax=docker/dockerfile:1
 
 ########## CUDA PATH ##########
+# TODO: GPU build is still broken, fix this at some point
+# problems with linking during llama-cpp-python build
+# consider downgrading python version and using pre-built wheels
 FROM nvidia/cuda:13.0.1-devel-ubuntu24.04 AS builder-cuda
 
 ENV PYTHONUNBUFFERED=1 PIP_NO_CACHE_DIR=1 APP_HOME=/app
