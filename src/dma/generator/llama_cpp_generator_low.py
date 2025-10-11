@@ -145,8 +145,79 @@ class LowLevelLlamaCppGenerator(BaseGenerator):
         )
         
         return input_str
-          
-          
+
+    def generate_input_string_qwen2_basic(self, conversation: Conversation) -> str:
+        """
+        Generate the input string for the Qwen2 model based on the conversation.
+        Very basic compared to the chat template version, but should work for simple cases.
+
+        Parameters
+        ----------
+        conversation : Conversation
+            The conversation to generate the input string for.
+
+        Returns
+        -------
+        str
+            The generated input string.
+        """
+
+        input_messages = []
+        for message in conversation.messages:
+            role = {
+                Role.USER: LlamaCppRole.USER,
+                Role.ASSISTANT: LlamaCppRole.ASSISTANT,
+                Role.SYSTEM: LlamaCppRole.SYSTEM
+            }.get(message.role, LlamaCppRole.USER).value
+
+            content_str = ""
+
+            # so far, we only support text and thought parts
+            for part in message.get_parts():
+                if isinstance(part, TextPart):
+                    content_str += part.text
+                elif isinstance(part, ThoughtPart):
+                    content_str += f"<think>{part.thought}</think>"
+
+            input_messages.append({
+                "role": role,
+                "content": content_str
+            })
+
+        # if the last message is from the assistant, we set
+        # continue_final_message to True, and also remove the think closing tag
+        # if it's the last part of the message
+        continue_final_message = False
+        if conversation.messages[-1].role == Role.ASSISTANT:
+            continue_final_message = True
+            if input_messages[-1]["content"].endswith("</think>"):
+                input_messages[-1]["content"] = input_messages[-1]["content"][:-len("</think>")]
+
+        final_input_list = []
+        # add messages
+        for message in input_messages:
+            name = "system"
+            if message["role"] == LlamaCppRole.USER.value:
+                name = "user"
+            elif message["role"] == LlamaCppRole.ASSISTANT.value:
+                name = "assistant"
+            
+            final_input_list.append(
+                f"<|im_start|>{name}\n{message['content']}<|im_end|>"
+            )
+            
+        if not continue_final_message:
+            # add start for new message
+            final_input_list.append(
+                f"<|im_start|>assistant\n<think>"
+            )
+        else:
+            # remove last <|im_end|> tag
+            final_input_list[-1] = final_input_list[-1].replace("<|im_end|>", "")
+
+        input_str = "\n".join(final_input_list)
+        return input_str
+
     def convert_output_to_message(self, output:str, conversation: Conversation) -> Message:
         """
         Convert the output from llama_cpp to a Message.
@@ -271,9 +342,9 @@ class LowLevelLlamaCppGenerator(BaseGenerator):
             conversation = self.add_context_as_reasoning(conversation, context)
         
         logging.info("Generating response...")
-        
-        message_str = self.generate_input_string(conversation)
-        
+
+        message_str = self.generate_input_string_qwen2_basic(conversation)
+
         print("=== Input to model ===")
         print(message_str)
         print("======================")
