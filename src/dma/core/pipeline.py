@@ -8,6 +8,7 @@ from dma.generator import LowLevelLlamaCppGenerator
 import os
 from dotenv import load_dotenv
 import logging
+from dma.utils import NER
 
 
 load_dotenv()
@@ -233,6 +234,11 @@ class Pipeline:
             The generated response if no
         """
         
+        # sanity check: we should have at least one message in the conversation
+        # (the users first prompt)
+        if len(conversation.messages) == 0:
+            raise ValueError("Conversation must have at least one message.")
+        
         # in case the conversation was not a request from an api and is the same object used to
         # store the actual conversation history, we need to copy it to avoid modifying the original
         # with things like instructions, system messages, etc.
@@ -240,6 +246,16 @@ class Pipeline:
         
         # TODO: enable this later
         # conversation = self._limit_input_length(conversation)
+        
+        # prefetch entities from prompt using NER
+        prompt: Message = conversation.messages[-1]
+        if prompt.message_text and prompt.role == Role.USER:
+            entities = NER.get_entities(prompt.message_text)
+            if len(entities) > 0:
+                logging.debug(f"Found entities in prompt: {entities}")
+                prompt.entities = entities
+            else:
+                logging.debug(f"No entities found in prompt.")
         
         # Evaluate the conversation
         queries = []

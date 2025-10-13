@@ -10,9 +10,9 @@ import logging
 def main():
     
     print("Sanity check: DMA main entry point.")
-    
-    logging.basicConfig(level=logging.INFO)
-    
+
+    logging.basicConfig(level=logging.DEBUG)
+
     print("Dynamic Memory Agent CLI")
     print("Type 'exit' to quit.")
     
