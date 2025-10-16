@@ -10,7 +10,7 @@ def get_embedder():
         _embedder = sentence_transformers.SentenceTransformer('all-MiniLM-L6-v2')
     return _embedder
 
-def embed_text(text:str | list[str]) -> np.array:
+def embed_text(text:str | list[str]) -> np.ndarray:
     """
     Embed a text using the MiniLM model.
     

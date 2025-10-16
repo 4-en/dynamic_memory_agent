@@ -9,13 +9,51 @@ _UNKNOWN_MULTIPLIER = 0.9
 class TimeRelevance(Enum):
     """
     An enum to represent the relevance of a memory or query in time.
+    Used together with a timestamp to determine how relevant a memory is based on its age.
+    For example, a memory with a time relevance of DAY would decay quicker than
+    a memory with a time relevance of YEAR when the relevant time differs from the memory time.
+    On the other hand, if we have a close match (e.g. 2 hours difference), the
+    DAY relevance would be more relevant than the YEAR relevance (although year is still relevant).
+    
+    This is useful for queries like "Who is the president of the US?", which would
+    refer to the date of the query and have a somewhat loose time relevance (YEAR).
+    On the other hand, a query like "What happened in the meeting yesterday?" would have a
+    very tight time relevance (DAY) and refer to a specific date (yesterday).
+    
+    Both a memory and a query can have a time relevance.
+    The query time relevance indicates the timeframe the user is interested in.
+    The memory time relevance indicates when the memory is relevant.
+    
+    Attributes
+    ----------
+    UNKNOWN : int
+        The time relevance is unknown, so we can't use time to determine relevance.
+        To avoid missing out on potentially relevant memories, this should always
+        be relatively high, but lower than an exact match.
+    DAY : int
+        The memory is relevant for a day.
+    WEEK : int
+        The memory is relevant for a week.
+    MONTH : int
+        The memory is relevant for a month.
+    YEAR : int
+        The memory is relevant for a year.
+    DECADE : int
+        The memory is relevant for a decade.
+    CENTURY : int
+        The memory is relevant for a century.
+    ALWAYS : int
+        The memory is always relevant, so time should not matter.
+
     """
     UNKNOWN = 0
-    NOW = 1
+    DAY = 1
     WEEK = 2
     MONTH = 3
     YEAR = 4
-    ALWAYS = 5
+    DECADE = 5
+    CENTURY = 6
+    ALWAYS = 7
     
     @staticmethod
     def from_string(time_relevance: str) -> 'TimeRelevance':
@@ -25,14 +63,18 @@ class TimeRelevance(Enum):
         time_relevance = time_relevance.upper()
         if time_relevance == "UNKNOWN":
             return TimeRelevance.UNKNOWN
-        elif time_relevance == "NOW":
-            return TimeRelevance.NOW
+        elif time_relevance == "DAY":
+            return TimeRelevance.DAY
         elif time_relevance == "WEEK":
             return TimeRelevance.WEEK
         elif time_relevance == "MONTH":
             return TimeRelevance.MONTH
         elif time_relevance == "YEAR":
             return TimeRelevance.YEAR
+        elif time_relevance == "DECADE":
+            return TimeRelevance.DECADE
+        elif time_relevance == "CENTURY":
+            return TimeRelevance.CENTURY
         elif time_relevance == "ALWAYS":
             return TimeRelevance.ALWAYS
         else:
@@ -51,7 +93,7 @@ class TimeRelevance(Enum):
             # since we don't know the time relevance, we will use a default multiplier, instead of a decay function
             # this is slighly lower than a "perfect" relevance, to give a slight advantage to memories with known relevance
             return _UNKNOWN_MULTIPLIER * value
-        elif self == TimeRelevance.NOW:
+        elif self == TimeRelevance.DAY:
             half_time = 2
         elif self == TimeRelevance.WEEK:
             half_time = 14
@@ -59,8 +101,12 @@ class TimeRelevance(Enum):
             half_time = 60
         elif self == TimeRelevance.YEAR:
             half_time = 730
+        elif self == TimeRelevance.DECADE:
+            half_time = 7300
+        elif self == TimeRelevance.CENTURY:
+            half_time = 73000
         elif self == TimeRelevance.ALWAYS:
-            half_time = 730 # for always, we will adjust the decay function later, to keep a minimum value
+            half_time = 730000 # for always, we will adjust the decay function later, to keep a minimum value
         
         days_since = sec_since / 86400
         

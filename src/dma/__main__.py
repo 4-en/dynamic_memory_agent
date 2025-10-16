@@ -2,7 +2,7 @@
 # by default, this will launch a basic command-line interface to interact with
 # the memory agent via multi turn conversations.
 
-from dma.core import Pipeline
+from dma.pipeline import Pipeline
 from dma.core import Conversation, Message, Role
 import logging
 

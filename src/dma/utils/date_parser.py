@@ -1,5 +1,10 @@
 import time
 
+DAY_IN_SECONDS = 60 * 60 * 24
+WEEK_IN_SECONDS = DAY_IN_SECONDS * 7
+MONTH_IN_SECONDS = DAY_IN_SECONDS * 30
+YEAR_IN_SECONDS = DAY_IN_SECONDS * 365
+
 # a function that tries to parse a timestamp from a string or int received from the evaluator
 def parse_timestamp(timestamp: str | int) -> float:
     """
@@ -13,7 +18,7 @@ def parse_timestamp(timestamp: str | int) -> float:
     - name of weekday
     - name of month
     
-    If the timestamp is not parsable, the current time will be returned.
+    If the timestamp is not parsable, -1 will be returned.
     
     Parameters
     ----------
@@ -26,22 +31,76 @@ def parse_timestamp(timestamp: str | int) -> float:
         The timestamp as a float
     """
     if isinstance(timestamp, int):
-        return time.time() - timestamp * 86400
+        return time.time() - timestamp * DAY_IN_SECONDS
 
     try:
         return float(timestamp)
     except ValueError:
         pass
     
+    timestamp_lower = timestamp.lower().strip()
+    if timestamp_lower in ["unknown", "n/a", "na", "none", "any", "always"]:
+        return -1
+    
     # check if timestamp is duration in days in format #d or #days
     if timestamp.endswith("d"):
         try:
-            return time.time() - int(timestamp[:-1]) * 86400
+            return time.time() - int(timestamp[:-1]) * DAY_IN_SECONDS
         except ValueError:
             pass
     elif timestamp.endswith("days"):
         try:
-            return time.time() - int(timestamp[:-4]) * 86400
+            return time.time() - int(timestamp[:-4]) * DAY_IN_SECONDS
+        except ValueError:
+            pass
+    elif timestamp.endswith("day"):
+        try:
+            return time.time() - int(timestamp[:-3]) * DAY_IN_SECONDS
+        except ValueError:
+            pass
+    elif timestamp.endswith("w"):
+        try:
+            return time.time() - int(timestamp[:-1]) * WEEK_IN_SECONDS
+        except ValueError:
+            pass
+    elif timestamp.endswith("weeks"):
+        try:
+            return time.time() - int(timestamp[:-5]) * WEEK_IN_SECONDS
+        except ValueError:
+            pass
+    elif timestamp.endswith("week"):
+        try:
+            return time.time() - int(timestamp[:-4]) * WEEK_IN_SECONDS
+        except ValueError:
+            pass
+    elif timestamp.endswith("m"):
+        try:
+            return time.time() - int(timestamp[:-1]) * MONTH_IN_SECONDS
+        except ValueError:
+            pass
+    elif timestamp.endswith("months"):
+        try:
+            return time.time() - int(timestamp[:-6]) * MONTH_IN_SECONDS
+        except ValueError:
+            pass
+    elif timestamp.endswith("month"):
+        try:
+            return time.time() - int(timestamp[:-5]) * MONTH_IN_SECONDS
+        except ValueError:
+            pass
+    elif timestamp.endswith("y"):
+        try:
+            return time.time() - int(timestamp[:-1]) * YEAR_IN_SECONDS
+        except ValueError:
+            pass
+    elif timestamp.endswith("years"):
+        try:
+            return time.time() - int(timestamp[:-5]) * YEAR_IN_SECONDS
+        except ValueError:
+            pass
+    elif timestamp.endswith("year"):
+        try:
+            return time.time() - int(timestamp[:-4]) * YEAR_IN_SECONDS
         except ValueError:
             pass
 
@@ -120,4 +179,4 @@ def parse_timestamp(timestamp: str | int) -> float:
         
     # of this doesn't pass, I don't know what you want from me
 
-    return time.time()
+    return -1

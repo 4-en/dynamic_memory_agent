@@ -39,6 +39,19 @@ class DmaConfig(Config):
     
     cc_context_injection_method: str = "The method to use for context injection. Options are 'reasoning' or 'expert'."
     context_injection_method: str = "reasoning"
+    
+    # Retrieval configuration
+    cc_enable_retrieval: str = "Whether to enable retrieval or not."
+    enable_retrieval: bool = True
+    cc_max_retrieval_iterations: str = "The maximum number of retrieval iterations."
+    max_retrieval_iterations: int = 5
+    cc_retrieval_step_summary: str = "Whether to include a summary of each retrieval step."
+    retrieval_step_summary: bool = True
+    cc_retrieval_num_results: str = "The number of results to retrieve per query."
+    retrieval_num_results: int = 5
+    cc_retrieval_time_relevance: str = "Whether to consider time relevance in retrieval."
+    retrieval_time_relevance: bool = False
+    
 
 _config_instance: DmaConfig = None
 def get_config() -> DmaConfig:
