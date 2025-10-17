@@ -7,7 +7,7 @@ from dma.core import Memory
 
 
 class Neo4jMemory(GraphMemory):
-    def __init__(self, uri: str, user: str, password: str, database: str = "neo4j_memory"):
+    def __init__(self, uri: str, user: str, password: str, database: str = "neo4j"):
         
         self.driver = GraphDatabase.driver(uri, auth=(user, password))
         self.database = database

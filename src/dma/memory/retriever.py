@@ -1,9 +1,9 @@
 from dma.core import RetrievalStep, EntityQuery, EmbeddingQuery, RetrievalQuery, Retrieval
 from dma.core import Conversation, Message
-from dma.core import Memory
+from dma.core import Memory, MemoryResult
 
 from .graph import GraphMemory, Neo4jPlaceholder
-from .embeddings import VectorMemory, FaissPlaceholder
+from .vector import VectorMemory, FaissPlaceholder
 
 from dma.config.dma_config import get_config
 
@@ -29,7 +29,7 @@ class Retriever:
         # might be useful to add in batch for efficiency
         raise NotImplementedError("Method not implemented yet.")
     
-    def retrieve(self, query: RetrievalStep, top_k: int = 5) -> list[Memory]:
+    def retrieve(self, query: RetrievalStep, top_k: int = 5) -> list[MemoryResult]:
         """Retrieve relevant memories based on the provided query.
         
         Parameters
