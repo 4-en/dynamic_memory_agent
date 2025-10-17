@@ -370,6 +370,7 @@ class QueryGenerator:
         try:
             json_content = json.loads(content)
         except json.JSONDecodeError as e:
+            logging.debug(f"Failed to decode JSON content: {content}")
             raise ValueError(f"Failed to parse JSON content: {e}")
         
         queries = []
