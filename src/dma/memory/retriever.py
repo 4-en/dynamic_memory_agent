@@ -44,4 +44,4 @@ class Retriever:
         list[Memory]
             A list of retrieved memories.
         """
-        raise NotImplementedError("Method not implemented yet.")
+        return []  # not implemented yet

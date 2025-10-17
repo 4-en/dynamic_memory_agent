@@ -1,7 +1,7 @@
 from dma.core.conversation import Conversation
 from dma.core.message import Message, Role
 from dma.core.memory import Memory
-from dma.core.retrieval import RetrievalStep, RetrievalQuery, Retrieval
+from dma.core.retrieval import RetrievalStep, RetrievalQuery, Retrieval, MemoryResult
 from dma.config import DmaConfig, get_config
 
 from dma.query import QueryGenerator
@@ -274,8 +274,8 @@ class Pipeline:
                 self.retriever.retrieve(pre_query, top_k=self.config.retrieval_num_results)
             else:
                 logging.debug(f"No entities found in prompt.")
-        
-        self.retrieval_loop(retrieval)
+
+        self.retrieval_loop(conversation, retrieval)
 
                 
         # TODO: generate and add memories after retrieval
@@ -305,7 +305,35 @@ class Pipeline:
         
         return response
     
-    def retrieval_loop(self, retrieval: Retrieval) -> None:
+    def _get_test_memories(self) -> list[Memory]:
+        """
+        Get test memories for testing purposes.
+
+        Returns
+        -------
+        list[Memory]
+            The test memories.
+        """
+
+        memories = []
+        sample_texts = [
+            "The James Webb Space Telescope (JWST) has a primary mirror with a diameter of 6.5 meters (21.3 feet), which gives it a collecting area of approximately 25.4 square meters. This significantly larger size compared to previous telescopes allows it to gather more light, enabling it to see objects that are older, more distant, or fainter.",
+            "Unlike Hubble's single, monolithic mirror, the JWST's primary mirror is composed of 18 individual hexagonal segments. Each segment is made of beryllium, which is both strong and lightweight, and is coated with a microscopically thin layer of gold to optimize its reflectivity for infrared light. These segments had to be folded to fit inside the rocket fairing for launch and were later unfolded in space.",
+            "The Hubble Space Telescope (HST) utilizes a primary mirror that is 2.4 meters (7.9 feet) in diameter, with a collecting area of about 4.5 square meters. It is a single-piece, polished glass mirror coated with layers of aluminum and magnesium fluoride. This design is optimized for observing in the near-ultraviolet, visible, and near-infrared spectra.",
+            "Hubble's mirror is a monolithic structure, meaning it is made from a single piece of glass. This design choice provides high optical quality and stability, which is essential for the precise observations Hubble conducts. The mirror's surface was polished to an accuracy of about 10 nanometers, allowing it to capture sharp images of distant celestial objects."
+        ]
+
+        for i, text in enumerate(sample_texts):
+            memory = Memory(
+                memory=text,
+                source=f"Test Memory {i+1}",
+                entities=["JWST", "Hubble Space Telescope", "mirror", "infrared light"]
+            )
+            memories.append(memory)
+
+        return memories
+    
+    def retrieval_loop(self, conversation: Conversation, retrieval: Retrieval) -> None:
         # TODO: consider adding a dedicated mechanism to decide whether to evaluate or not
         # could be sentence transformer based classifier that decides whether to evaluate or not
         # could be trained using saved conversations and whether they led to retrieval or not
@@ -313,6 +341,15 @@ class Pipeline:
         # generate queries
         
         # not implemented yet
+        # test logic here (remove later):
+        retrieval = self.query_generator.generate_queries(conversation, retrieval)
+        last_step = retrieval.steps[-1]
+        if len(last_step.queries) == 0:
+            logging.debug("No queries generated, skipping retrieval.")
+            return
+        for test_memory in self._get_test_memories():
+            last_step.results.append(MemoryResult(memory=test_memory, score=1.0))
+        
         return
         
         if (not self.query_generator) or (not self.retriever):
@@ -322,7 +359,7 @@ class Pipeline:
         # TODO: add retriever and retrieval loop
         while not retrieval.done:
             logging.debug(f"Retrieval iteration {retrieval.current_iteration+1}/{retrieval.max_iterations}")
-            retrieval = self.query_generator.generate_queries(retrieval)
+            retrieval = self.query_generator.generate_queries(conversation, retrieval)
             
             last_step = retrieval.steps[-1]
             if len(last_step.queries) == 0 or len(last_step.results) > 0:

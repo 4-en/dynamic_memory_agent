@@ -221,6 +221,31 @@ class Message:
         if self.id is None:
             self.id = str(uuid4())
             
+        if self.content is None:
+            self.content = []
+        elif isinstance(self.content, str):
+            self.content = [TextPart(self.content)]
+            
+    def add_content(self, content: MessagePart | str):
+        """
+        Add content to the message.
+
+        Parameters
+        ----------
+        content : MessagePart
+            The content to add to the message.
+        """
+        if self.content is None:
+            self.content = []
+        
+        if type(self.content) is str:
+            self.content = [TextPart(self.content)]
+            
+        if type(content) is str:
+            content = TextPart(content)
+        
+        self.content.append(content)
+            
     def get_formatted(self) -> str:
         """
         Return the formatted message.
@@ -340,12 +365,10 @@ class Message:
             The message parts.
         """
         if self.content is None:
-            return []
-        
-        if type(self.content) is list:
-            return self.content
-
-        return [TextPart(self.content)]
+            self.content = []
+        elif isinstance(self.content, str):
+            self.content = [TextPart(self.content)]
+        return self.content
 
 
     def __str__(self) -> str:

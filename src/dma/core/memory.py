@@ -186,15 +186,15 @@ class Memory:
     This can include personal information about a person or general knowledge.
     """
     memory: str # The memory to store
-    entities: dict = field(default_factory=dict)
+    entities: dict = field(default_factory=dict) # entities mentioned in the memory, with occurrence counts
     topic: str = None # The topic of the memory
     time_relevance: TimeRelevance = TimeRelevance.ALWAYS
     truthfulness: float = 1.0 # The estimated truthfulness of the memory, 1.0 is probably completely true, 0.0 is probably completely false
-    memory_time_point: float = field(default_factory=time.time) # The time the memory is about (not the time the memory was created)
+    memory_time_point: float = -1 # The time the memory is about (not the time the memory was created)
     source: str = "unknown" # The source of the memory, e.g. a person or a website
     embedding: np.ndarray = None # The embedding of the memory
     creation_time: float = field(default_factory=time.time) # The time the memory was created
-    last_access: float = field(default_factory=lambda: time()) # The last time this memory was accessed
+    last_access: float = field(default_factory=time.time) # The last time this memory was accessed
     total_access_count: int = 0 # The total number of times this memory was accessed
     id: str = None # The ID of the memory
 
@@ -224,6 +224,8 @@ class Memory:
                     occurences += 1
                     i += 1
             occurences = max(1, occurences)
+            if entity not in self.entities:
+                self.entities[entity] = 0
             self.entities[entity] += occurences
 
         if self.id is None:
@@ -252,6 +254,22 @@ class Memory:
 
         self.memory = memory
         self.embedding = None
+        
+    def add_entities(self, entities: list[str]):
+        """
+        Add entities to the memory.
+
+        Parameters
+        ----------
+        entities : list[str]
+            The entities to add.
+        """
+        for entity in entities:
+            entity = entity.lower()
+            if entity in self.entities:
+                self.entities[entity] += 1
+            else:
+                self.entities[entity] = 1
 
     
     def to_dict(self) -> dict:

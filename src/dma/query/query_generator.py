@@ -352,7 +352,6 @@ class QueryGenerator:
         tuple[str, list[ContextQuery]]
             A tuple containing the reasoning string and the parsed list of queries.
         """
-        content = response.content.strip()
         
         # Extract reasoning if present
         reasoning = response.reasoning_text.strip() if response.reasoning_text else ""
