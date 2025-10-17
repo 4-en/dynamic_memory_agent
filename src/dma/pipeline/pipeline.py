@@ -66,12 +66,10 @@ class Pipeline:
 
         """
         
-        print("Sanity check: Initializing DMA Pipeline...")
-        
         # load environment variables from .env file in root directory
         dotenv_path = "./.env"
         if not os.path.exists(dotenv_path):
-            print(f"Creating .env file in {os.path.abspath(dotenv_path)}")
+            logging.info(f"Creating .env file in {os.path.abspath(dotenv_path)}")
             with open(dotenv_path, "w") as f:
                 f.write("# Add environment variables here")
         else:

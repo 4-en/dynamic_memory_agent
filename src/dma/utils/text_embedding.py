@@ -5,6 +5,7 @@ import logging
 _embedder = None
 
 def get_embedder():
+    global _embedder
     if _embedder is None:
         logging.info("Loading sentence transformer model...")
         _embedder = sentence_transformers.SentenceTransformer('all-MiniLM-L6-v2')
@@ -27,3 +28,8 @@ def embed_text(text:str | list[str]) -> np.ndarray:
     """
     embedder = get_embedder()
     return embedder.encode(text)
+
+
+# preload the embedder
+if _embedder is None:
+    get_embedder()

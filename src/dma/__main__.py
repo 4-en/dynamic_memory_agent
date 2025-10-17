@@ -9,7 +9,6 @@ import logging
 
 def main():
     
-    print("Sanity check: DMA main entry point.")
 
     logging.basicConfig(level=logging.DEBUG)
 

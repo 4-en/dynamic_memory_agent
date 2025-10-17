@@ -272,6 +272,7 @@ class Retrieval:
     current_iteration: int = 0 # Current iteration count
     done: bool = False # Whether the retrieval process is complete
     satisfactory: bool = False # Whether the retrieved memories are satisfactory (as opposed to max_iterations reached)
+    _last_summary_count: int = -1 # internal counter to track if final summary has been updated
     
     def add_step(self, step: RetrievalStep):
         """Add a new retrieval step to the process.
@@ -293,16 +294,37 @@ class Retrieval:
         """
         self.satisfactory = True
         self.done = True
-        
-    def finalize(self) -> str:
+
+    def finalize(self, force_new: bool=False) -> str:
         """Finalize the retrieval process by generating a final summary of all steps.
+        
+        Parameters
+        ----------
+        force_new : bool, optional
+            Whether to force generating a new summary even if one already exists, by default False.
         
         Returns
         -------
         str
             The final summary of the retrieval process.
         """
+        # count total memories in all steps
+        total_memories = sum(len(step.results) for step in self.steps)
+        
+        if self.final_summary != "" and not force_new and self._last_summary_count == total_memories:
+            return self.final_summary
+        
         summaries = [step.summary for step in self.steps if step.summary]
         self.final_summary = "\n".join(summaries)
+        
+        if self.final_summary == "":
+            self.final_summary = "Okay, this is what I know:\n"
+            for step in self.steps:
+                for result in step.results:
+                    self.final_summary += f"- {result.memory.memory}\n"
+            self.final_summary += "\nI should use think about the relevant information and then respond accordingly."
+                    
+        self._last_summary_count = total_memories
+        
         return self.final_summary
     

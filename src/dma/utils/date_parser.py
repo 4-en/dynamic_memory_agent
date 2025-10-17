@@ -30,13 +30,12 @@ def parse_timestamp(timestamp: str | int) -> float:
     float
         The timestamp as a float
     """
-    if isinstance(timestamp, int):
+    if isinstance(timestamp, int) or isinstance(timestamp, float):
         return time.time() - timestamp * DAY_IN_SECONDS
+    
+    if not isinstance(timestamp, str):
+        return -1
 
-    try:
-        return float(timestamp)
-    except ValueError:
-        pass
     
     timestamp_lower = timestamp.lower().strip()
     if timestamp_lower in ["unknown", "n/a", "na", "none", "any", "always"]:

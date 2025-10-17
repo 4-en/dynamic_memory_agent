@@ -374,7 +374,8 @@ class QueryGenerator:
             raise ValueError(f"Failed to parse JSON content: {e}")
         
         queries = []
-        if not json_content is list:
+        if not isinstance(json_content, list):
+            logging.debug(f"JSON content of type {type(json_content)} is not a list: {json_content}")
             raise ValueError("Failed to parse query list.")
         
         for d in json_content:
@@ -387,7 +388,7 @@ class QueryGenerator:
             topic = d.get("topic", None)
             entities = d.get("entities", [])
             time_relevance_str = d.get("time_relevance", "UNKNOWN")
-            time_point_str = d.get("time_point", "UNKNOWN")
+            time_point_str = d.get("time_point", "UNKNOWN") or "UNKNOWN"
             
             time_relevance = TimeRelevance.from_string(time_relevance_str)
             time_point = parse_timestamp(time_point_str) if time_point_str != "UNKNOWN" else -1
@@ -404,6 +405,10 @@ class QueryGenerator:
                 time_point=time_point_str
             )
             queries.append(context_query)
+            
+            logging.debug(f"Parsed ContextQuery: {context_query.query} with entities {context_query.entities} "
+                          f"and time_relevance {context_query.time_relevance}, time_point {context_query.time_point}")
+            
             
         return reasoning, queries
             
