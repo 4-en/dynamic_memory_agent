@@ -86,6 +86,9 @@ bash-db:
 	$(DC) -p $(PROJECT_NAME) $(COMPOSE_FILES) exec $(DB_SERVICE) /bin/bash
 
 # -------- Virtualenv helpers --------
+# Requirements: Python 3.12+, virtualenv
+# cuda toolkit must be installed on host for CUDA support
+# faiss must be built and installed (see https://pypi.org/project/faiss-cpu/)
 venv:
 	@echo "Creating virtualenv..."
 	python3.12 -m venv .venv
