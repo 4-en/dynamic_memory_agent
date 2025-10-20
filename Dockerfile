@@ -12,6 +12,26 @@ RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-ins
     rm -rf /var/lib/apt/lists/*
 WORKDIR ${APP_HOME}
 
+# build faiss with cuda support
+# openblas required by faiss
+RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends libopenblas-dev && \
+    rm -rf /var/lib/apt/lists/*
+
+RUN git clone https://github.com/facebookresearch/faiss.git
+WORKDIR ${APP_HOME}/faiss
+RUN cmake . -B build -DFAISS_ENABLE_GPU=ON -DFAISS_ENABLE_PYTHON=OFF -DFAISS_OPT_LEVEL=avx2 -DBUILD_TESTING=OFF && \
+    cmake --build build -j8 && \
+    cmake --install build --prefix /usr/local && \
+    cd .. && rm -rf faiss
+
+WORKDIR ${APP_HOME}
+
+# install faiss-cpu ahead of time
+# export FAISS_ENABLE_GPU=ON FAISS_OPT_LEVEL=avx512
+# pip install --no-binary :all: faiss-cpu
+ENV FAISS_ENABLE_GPU=ON FAISS_OPT_LEVEL=avx2
+RUN python3 -m pip install faiss-cpu --no-cache-dir --break-system-packages --no-binary :all:
+
 # Copy sources
 COPY pyproject.toml ./
 COPY src/ ./src/
@@ -55,6 +75,26 @@ RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-ins
       python3.12 python3-pip build-essential cmake git && \
     rm -rf /var/lib/apt/lists/*
 WORKDIR ${APP_HOME}
+
+# install faiss-cpu ahead of time
+RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends libopenblas-dev && \
+    rm -rf /var/lib/apt/lists/*
+
+RUN git clone https://github.com/facebookresearch/faiss.git
+WORKDIR ${APP_HOME}/faiss
+RUN cmake . -B build -DFAISS_ENABLE_GPU=OFF -DFAISS_ENABLE_PYTHON=OFF -DFAISS_OPT_LEVEL=avx2 -DBUILD_TESTING=OFF && \
+    cmake --build build -j8 && \
+    cmake --install build --prefix /usr/local && \
+    cd .. && rm -rf faiss
+
+WORKDIR ${APP_HOME}
+
+# install faiss-cpu ahead of time
+# export FAISS_ENABLE_GPU=ON FAISS_OPT_LEVEL=avx512
+# pip install --no-binary :all: faiss-cpu
+ENV FAISS_ENABLE_GPU=OFF FAISS_OPT_LEVEL=avx2
+RUN python3 -m pip install faiss-cpu --no-cache-dir --break-system-packages --no-binary :all:
+
 
 COPY pyproject.toml ./
 COPY src/ ./src/
