@@ -23,7 +23,9 @@ dependencies = [
     "llama_cpp_python>=0.3.16",
     "sentence-transformers",
     "python-dotenv>=1.1.1",
-    "neo4j>=6.0.2"
+    "neo4j>=6.0.2",
+    "fastapi>=0.119.0",
+    "uvicorn>=0.38.0",
 ]
 
 [tool.setuptools]

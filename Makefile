@@ -88,6 +88,7 @@ bash-db:
 # -------- Virtualenv helpers --------
 # Requirements: Python 3.12+, virtualenv
 # cuda toolkit must be installed on host for CUDA support
+# openblas is necessary for faiss-cpu
 # faiss must be built and installed (see https://pypi.org/project/faiss-cpu/)
 venv:
 	@echo "Creating virtualenv..."
