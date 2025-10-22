@@ -62,6 +62,18 @@ with driver.session() as session:
     result = session.run("RETURN 1")
     print("Connected to Neo4j:", result.single()[0] == 1)
     
+def clear_db(tx):
+    tx.run("MATCH (n) DETACH DELETE n")
+    
+
+def merge_dict_query(node_label: str, data: dict, key_field: str) -> str:
+    set_statements = ",\n".join([f"    n.{k} = $data.{k}" for k in data.keys() if k != key_field])
+    query = f"""
+    MERGE (n:{node_label} {{{key_field}: $data.{key_field}}})
+    SET {set_statements}
+    """
+
+    return query
 
 def add_memory(tx, memory: Memory):
     mem_id = memory.id
