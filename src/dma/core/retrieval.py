@@ -238,6 +238,8 @@ class RetrievalStep:
     results: list[MemoryResult] = field(default_factory=list)
     reasoning: str = "" # An optional reasoning about the queries
     summary: str = "" # A summary of all retrieved memories
+    clarification_needed: bool = False # Whether clarification is needed for the next step
+    is_pre_query: bool = False # Whether this step is a pre-query (to determine if clarification is needed)
     
 @dataclass
 class Retrieval:
@@ -294,6 +296,26 @@ class Retrieval:
         """
         self.satisfactory = True
         self.done = True
+        
+    def needs_clarification(self) -> bool:
+        """Check if any retrieval step indicated that clarification is needed.
+        
+        Returns
+        -------
+        bool
+            True if clarification is needed, False otherwise.
+        """
+        # true if only one step and it indicates clarification needed
+        # if the first step is a pre-query, we should check the second step
+        if len(self.steps) == 0:
+            return False
+        if len(self.steps) == 1:
+            return self.steps[0].clarification_needed
+        
+        if len(self.steps) == 2 and self.steps[0].is_pre_query:
+            return self.steps[1].clarification_needed
+        
+        return False
 
     def finalize(self, force_new: bool=False) -> str:
         """Finalize the retrieval process by generating a final summary of all steps.
@@ -308,6 +330,10 @@ class Retrieval:
         str
             The final summary of the retrieval process.
         """
+        
+        if self.needs_clarification():
+            return "Okay, the user's prompt seems a bit unclear. I should ask for clarification before proceeding. First, "
+        
         # count total memories in all steps
         total_memories = sum(len(step.results) for step in self.steps)
         

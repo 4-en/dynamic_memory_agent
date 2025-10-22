@@ -138,7 +138,7 @@ class BaseGenerator(ABC):
         Conversation
             The conversation with the context added.
         """
-        reasoning = f"<think>{context}"
+        reasoning = f"{context}"
         
         reasoning_part = ThoughtPart(reasoning)
         

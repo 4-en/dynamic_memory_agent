@@ -104,6 +104,7 @@
                 let buffer = '';
                 let responseStarted = false;
                 let responseElement = null;
+                let responseElementRaw = null;
 
                 const START_TOKENS = {
                     thought: '[THOUGHT]',
@@ -115,6 +116,9 @@
                     if (done) break;
 
                     buffer += decoder.decode(value, { stream: true });
+
+                    // TODO: add markdown parsing here
+                    // e.g. https://cdn.jsdelivr.net/npm/showdown@<version tag>/dist/showdown.min.js
                     
                     if (responseStarted) {
                         // If we're already in the response, just append, unless new start token found
@@ -142,6 +146,7 @@
                             if (tokenIndex !== -1) {
                                 // Create new message element
                                 responseElement = addMessage('assistant', type, '');
+                                responseElementRaw = ""; // For potential future use
                                 buffer = buffer.substring(tokenIndex + token.length);
                                 responseStarted = true;
                                 break;

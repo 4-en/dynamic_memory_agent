@@ -178,6 +178,12 @@ class LowLevelLlamaCppGenerator(BaseGenerator):
                     content_str += part.text
                 elif isinstance(part, ThoughtPart):
                     content_str += f"<think>{part.thought}</think>"
+                    
+            # cleans up multiple think tags in a row
+            # since models are mostly trained to have single think tags,
+            # this should make it a bit more familiar to token generation
+            # (might also do not help at all, but at least it's cleaner, and probably not worse)
+            content_str = content_str.replace("</think><think>", "\n")
 
             input_messages.append({
                 "role": role,
@@ -345,9 +351,9 @@ class LowLevelLlamaCppGenerator(BaseGenerator):
 
         message_str = self.generate_input_string_qwen2_basic(conversation)
 
-        print("=== Input to model ===")
-        print(message_str)
-        print("======================")
+        #print("=== Input to model ===")
+        #print(message_str)
+        #print("======================")
         
         response = self.model(
             prompt=message_str,

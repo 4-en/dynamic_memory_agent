@@ -31,6 +31,7 @@ class QueryResponseModel(BaseModel):
     A QueryResponseModel represents the response from the query generator.
     It contains a list of ContextQuery objects.
     """
+    clarification_needed: bool
     queries: list[ContextQuery]
 
 class QueryGenerator:
@@ -98,6 +99,7 @@ class QueryGenerator:
             f"Provide multiple queries if necessary, up to {MAX_QUERIES}, each focusing on different aspects of the user's input and context.\n"
             "If no additional information is required, either due to being already clarified in previous retrievals or assistent messages, or "
             "the prompt not being complex enough to require any, leave the list empty.\n"
+            "If the user's prompt is unclear or ambiguous, think about what they would have to clarify and leave the list empty.\n"
             "For each query, also provide:\n"
             "- The topic or entity the query is focused on (if applicable).\n"
             "- The time relevance of the query (e.g., DAY, WEEK, MONTH, YEAR, DECADE, CENTURY, ALWAYS, UNKNOWN).\n"
@@ -118,19 +120,23 @@ class QueryGenerator:
             The response format for the query generator.
         """
         formats = (
-            "The response should be a JSON list of query objects with the following structure:\n"
-            "[\n"
-            "  {\n"
-            "    'query': str, # a query in form of a question to retrieve relevant memories, as verbose as possible\n"
-            "    'topic': str or null, # the topic or entity the query is focused on\n"
-            "    'time_relevance': str, # a time frame the query is focused on, one of ['UNKNOWN', 'DAY', 'WEEK', 'MONTH', 'YEAR', 'DECADE', 'CENTURY', 'ALWAYS']\n"
-            "    'time_point': str or null, # a specific time point or period the query is focused on, formatted as one of: "
+            "The response should be a JSON object with the following structure:\n"
+            "{\n"
+            "  \"clarification_needed\": bool, # true if the user's prompt is unclear and needs clarification, false otherwise\n"
+            "  \"queries\": [\n"
+            "    {\n"
+            "      \"query\": str, # a query in form of a question to retrieve relevant memories, as verbose as possible\n"
+            "      \"topic\": str or null, # the topic or entity the query is focused on\n"
+            "      \"entities\": [str, ...], # a list of relevant entities, such as people, places, concepts, organizations, technologies etc.\n"
+            "      \"time_relevance\": str, # a time frame the query is focused on, one of ['UNKNOWN', 'DAY', 'WEEK', 'MONTH', 'YEAR', 'DECADE', 'CENTURY', 'ALWAYS']\n"
+            "      \"time_point\": str or null, # a specific time point or period the query is focused on, formatted as one of: "
             "#d (number of days ago), #w (number of weeks ago), #m (number of months ago), #y (number of years ago), 'YYYY-MM-DD' (specific date), "
             "'YYYY-MM' (specific month), 'YYYY' (specific year), 'DD' (specific day of this month), 'NAME_OF_MONTH' (specific month of this year), "
             "'NAME_OF_WEEKDAY' (specific day of this week), 'UNKNOWN' (if not applicable)\n"
-            "  },\n"
-            "  ...\n"
-            "]\n"
+            "    },\n"
+            "    ...\n"
+            "  ]\n"
+            "}\n"
             "Ensure the JSON is properly formatted."
         )
         
@@ -150,21 +156,26 @@ class QueryGenerator:
             "User input: 'I want to know about the project we discussed last week and any updates on the budget.'\n"
             "Conversation context: Recent messages about project discussions and budget considerations.\n"
             "Previous retrieval: Memories related to project timelines and financial reports.\n"
-            "Generated queries:\n"
-            "[\n"
-            "  {\n"
-            "    'query': 'What were the key points discussed about the project?',\n"
-            "    'topic': 'project',\n"
-            "    'time_relevance': 'WEEK',\n"
-            "    'time_point': '#1w'\n"
-            "  },\n"
-            "  {\n"
-            "    'query': 'Are there any recent updates on the budget for the project?',\n"
-            "    'topic': 'budget',\n"
-            "    'time_relevance': 'MONTH',\n"
-            "    'time_point': '#1m'\n"
-            "  }\n"
-            "]\n"
+            "Generated response:\n"
+            "{\n"
+            "  \"clarification_needed\": false,\n"
+            "  \"queries\": [\n"
+            "    {\n"
+            "      \"query\": \"What were the key points discussed about the EEG project MiniEEG in the meeting last week?\",\n"
+            "      \"topic\": \"MiniEEG Project Discussion\",\n"
+            "      \"entities\": [\"EEG\", \"MiniEEG\"],\n"
+            "      \"time_relevance\": \"WEEK\",\n"
+            "      \"time_point\": \"#1w\"\n"
+            "    },\n"
+            "    {\n"
+            "      \"query\": \"Are there any recent updates on the budget for the MiniEEG project?\",\n"
+            "      \"topic\": \"MiniEEG Project Budget\",\n"
+            "      \"entities\": [\"MiniEEG\"],\n"
+            "      \"time_relevance\": \"MONTH\",\n"
+            "      \"time_point\": \"#1m\"\n"
+            "    }\n"
+            "  ]\n"
+            "}\n"
         )
         
         return example
@@ -303,7 +314,7 @@ class QueryGenerator:
         new_step = RetrievalStep(queries=[], results=[])
         
         try:
-            reasoning, queries = self._parse_reasoning_and_json(response)
+            reasoning, queries, clarification_needed = self._parse_reasoning_and_json(response)
         except ValueError as e:
             # If parsing fails, return the retrieval unchanged
             logging.error(f"Failed to parse query generator response: {e}")
@@ -312,6 +323,7 @@ class QueryGenerator:
             return retrieval
         
         new_step.reasoning = reasoning
+        new_step.clarification_needed = clarification_needed
         
         if len(queries) == 0:
             # No queries generated, mark retrieval as done
@@ -358,14 +370,14 @@ class QueryGenerator:
         content = response.message_text.strip()
         
         # we are expecting a JSON object in the content, specifically a list of queries
-        if not content.startswith("["):
-            # try to fix it by finding the first '[' and last ']' and extracting that part
-            start = content.find("[")
-            end = content.rfind("]")
+        if not content.startswith("{"):
+            # try to fix it by finding the first '{' and last '}' and extracting that part
+            start = content.find("{")
+            end = content.rfind("}")
             if start != -1 and end != -1 and end > start:
                 content = content[start:end+1]
             else:
-                raise ValueError("Response does not contain a valid JSON array.")
+                raise ValueError("Response does not contain a valid JSON object.")
             
         try:
             json_content = json.loads(content)
@@ -373,12 +385,17 @@ class QueryGenerator:
             logging.debug(f"Failed to decode JSON content: {content}")
             raise ValueError(f"Failed to parse JSON content: {e}")
         
-        queries = []
-        if not isinstance(json_content, list):
-            logging.debug(f"JSON content of type {type(json_content)} is not a list: {json_content}")
-            raise ValueError("Failed to parse query list.")
+        if not ("queries" in json_content or "clarification_needed" in json_content):
+            logging.debug(f"JSON content contains no 'queries' or 'clarification_needed' field: {json_content}")
+            raise ValueError("JSON content does not contain 'queries' or 'clarification_needed' field.")
         
-        for d in json_content:
+        clarification_needed = json_content.get("clarification_needed", False)
+        queries = []
+        if not isinstance(json_content, dict):
+            logging.debug(f"JSON content of type {type(json_content)} is not a dict: {json_content}")
+            raise ValueError("Failed to parse query dict.")
+
+        for d in json_content.get("queries", []):
             if not isinstance(d, dict):
                 raise ValueError("Each query must be a JSON object.")
             
@@ -410,7 +427,7 @@ class QueryGenerator:
                           f"and time_relevance {context_query.time_relevance}, time_point {context_query.time_point}")
             
             
-        return reasoning, queries
+        return reasoning, queries, clarification_needed
             
 
         

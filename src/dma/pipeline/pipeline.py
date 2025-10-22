@@ -10,7 +10,9 @@ from dma.memory import Retriever
 import os
 from dotenv import load_dotenv
 import logging
+from typing import Callable
 from dma.utils import NER
+from .pipeline_status import PipelineStatus, PipelineUpdateType, PipelineUpdate
 
 
 load_dotenv()
@@ -209,7 +211,13 @@ class Pipeline:
             
         return response.message_text if response else None
 
-    def generate(self, conversation: Conversation, *args, **kwargs) -> Message | None:
+    def generate(
+        self, 
+        conversation: Conversation, 
+        progress_callback: Callable[[PipelineUpdate], None] | None = None,
+        *args, 
+        **kwargs
+        ) -> Message | None:
         """
         Generate a response based on the conversation.
 
@@ -264,7 +272,7 @@ class Pipeline:
                 logging.debug(f"Found entities in prompt: {entities}")
                 prompt.entities = entities
                 pre_query = RetrievalQuery.from_entities(entities, weight=1.0)
-                pre_step = RetrievalStep(queries=[pre_query])
+                pre_step = RetrievalStep(queries=[pre_query], is_pre_query=True)
                 retrieval.add_step(pre_step)
                 # since this is the pre-query, we don't count it against the max iterations
                 retrieval.current_iteration -= 1
@@ -287,8 +295,7 @@ class Pipeline:
         final_summary = retrieval.finalize()
         if not final_summary or final_summary.strip() == "":
             final_summary = None
-        
-        
+
         # Generate response
         # print(f"Request: {conversation}")
         response = self.generator.generate(conversation, context=final_summary)
@@ -341,6 +348,10 @@ class Pipeline:
         # not implemented yet
         # test logic here (remove later):
         retrieval = self.query_generator.generate_queries(conversation, retrieval)
+        if retrieval.done or len(retrieval.steps) == 0:
+            logging.debug("Retrieval marked as done or no retrieval steps, skipping retrieval.")
+            return
+        
         last_step = retrieval.steps[-1]
         if len(last_step.queries) == 0:
             logging.debug("No queries generated, skipping retrieval.")
