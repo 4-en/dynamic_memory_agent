@@ -62,13 +62,46 @@ class QueryGenerator:
         prompt: Conversation = self._prepare_prompt(conversation, retrieval)
         beginning: str | None = self._get_reply_beginning()
         
-        # Generate the queries using the generator
-        response = self.generator.generate(prompt, context=beginning)
+        if not retrieval:
+            user_prompt = conversation.messages[-1] if conversation.messages else None
+            if not user_prompt or user_prompt.role != Role.USER:
+                raise ValueError("The last message in the conversation must be a user message.")
+            retrieval = Retrieval(
+                conversation=conversation,
+                user_prompt=user_prompt,
+                steps=[]
+            )
+            
+        attempts = 0
+        max_attempts = 3
+        success = False
+        step: RetrievalStep | None = None
         
-        # Parse the response to extract queries
-        new_retrieval = self._parse_response(response, retrieval, conversation)
+        while not success and attempts < max_attempts:
+            try:
+                # Generate the queries using the generator
+                response = self.generator.generate(prompt, context=beginning)
+
+                # Parse the response to extract queries
+                step = self._parse_response(response)
+                success = True
+                
+            except Exception as e:
+                logging.error(f"Error generating queries: {e}")
+                attempts += 1
+                continue
+
         
-        return new_retrieval
+        if step and success:
+            retrieval.add_step(step)
+            if len(step.queries) == 0:
+                retrieval.mark_satisfactory()
+        else:
+            logging.error("Failed to generate queries after multiple attempts.")
+            retrieval.done = True
+            retrieval.satisfactory = False
+        
+        return retrieval
     
     def _get_instructions(self) -> str:
         """
@@ -234,7 +267,7 @@ class QueryGenerator:
         str | None
             The reply beginning to add.
         """
-        beginning = "Okay, I should think about what other information I might need to reply to the user."
+        beginning = "Okay, first I should think if the user's prompt has enough context to generate relevant queries, and if so, I will generate them in JSON format as specified."
         if self.generator is LowLevelLlamaCppGenerator:
             # only the low level model supports custom beginnings
             return beginning
@@ -280,7 +313,7 @@ class QueryGenerator:
             content="\n".join(message_content)
         ))
         
-    def _parse_response(self, response:Message, retrieval:Retrieval, conversation:Conversation) -> Retrieval:
+    def _parse_response(self, response:Message) -> RetrievalStep:
         """
         Parse the response from the query generator to extract queries
         and update the retrieval object.
@@ -290,25 +323,12 @@ class QueryGenerator:
         response : Message
             The response message from the query generator.
         retrieval : Retrieval
-            The current retrieval object to update.
-        conversation : Conversation
-            The current conversation context.
             
         Returns
         -------
-        Retrieval
-            The updated retrieval object with new queries.
+        RetrievalStep
+            The updated retrieval step with new queries.
         """
-        
-        if not retrieval:
-            user_prompt = conversation.messages[-1] if conversation.messages else None
-            if not user_prompt or user_prompt.role != Role.USER:
-                raise ValueError("The last message in the conversation must be a user message.")
-            retrieval = Retrieval(
-                conversation=conversation,
-                user_prompt=user_prompt,
-                steps=[]
-            )
             
         # Create a new retrieval step
         new_step = RetrievalStep(queries=[], results=[])
@@ -317,18 +337,14 @@ class QueryGenerator:
             reasoning, queries, clarification_needed = self._parse_reasoning_and_json(response)
         except ValueError as e:
             # If parsing fails, return the retrieval unchanged
-            logging.error(f"Failed to parse query generator response: {e}")
-            retrieval.done = True
-            retrieval.satisfactory = False
-            return retrieval
+            raise Exception(f"Failed to parse query generator response: {e}")
         
         new_step.reasoning = reasoning
         new_step.clarification_needed = clarification_needed
         
         if len(queries) == 0:
-            # No queries generated, mark retrieval as done
-            retrieval.mark_satisfactory()
-            return retrieval
+            # No queries generated
+            return new_step
         
         for query in queries:
             try:
@@ -345,8 +361,10 @@ class QueryGenerator:
                 logging.warning(f"Failed to create RetrievalQuery from ContextQuery: {e}")
                 continue
             
-        retrieval.add_step(new_step)
-        return retrieval
+        if len(new_step.queries) == 0 and len(queries) > 0:
+            raise Exception("All generated queries failed to parse into RetrievalQuery objects.")
+            
+        return new_step
         
         
         
