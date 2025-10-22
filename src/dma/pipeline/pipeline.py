@@ -479,7 +479,18 @@ class Pipeline:
                 retrieval.done = True
                 return
 
-            self.retriever.retrieve(last_step, top_k=self.config.retrieval_num_results)
+            results: list[MemoryResult] = self.retriever.retrieve(last_step, top_k=self.config.retrieval_num_results)
+            # TODO: what to do if no results found?
+            # for now, we just add an empty result and mark as done
+            # alternatives:
+            # - continue with next iteration and different queries
+            # - ask user for clarification/more info
+            # - use web search to find more info (and create memories from that, allowing for future retrieval)
+            last_step.results.extend(results)
+            if len(results) == 0:
+                logging.debug("No results found, stopping retrieval.")
+                retrieval.done = True
+            
             current_step += 1
             self._update_progress(
                 progress_callback,
