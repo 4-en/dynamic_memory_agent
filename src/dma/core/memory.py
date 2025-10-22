@@ -178,6 +178,7 @@ class TimeRelevance(Enum):
 import time
 import math
 from dma.utils.ner import NER
+from dma.utils.text_embedding import embed_text
 
 @dataclass
 class Memory:
@@ -230,6 +231,9 @@ class Memory:
 
         if self.id is None:
             self.id = uuid.uuid4().hex
+            
+        if self.embedding is None:
+            self.embedding = embed_text(self.memory)
 
     def set_memory(self, memory: str):
         old_ner = NER.get_entities(self.memory)
@@ -253,7 +257,7 @@ class Memory:
             self.entities[entity] += occurences
 
         self.memory = memory
-        self.embedding = None
+        self.embedding = embed_text(self.memory)
         
     def add_entities(self, entities: list[str]):
         """
