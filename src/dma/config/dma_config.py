@@ -49,6 +49,8 @@ class DmaConfig(Config):
     retrieval_step_summary: bool = True
     cc_retrieval_num_results: str = "The number of results to retrieve per query."
     retrieval_num_results: int = 5
+    cc_enable_pre_retrieval: str = "Whether to enable a pre-retrieval step which uses NER to query based on entities in the user prompt."
+    enable_pre_retrieval: bool = True
     cc_retrieval_time_relevance: str = "Whether to consider time relevance in retrieval."
     retrieval_time_relevance: bool = False
     

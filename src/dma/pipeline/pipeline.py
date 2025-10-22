@@ -12,7 +12,7 @@ from dotenv import load_dotenv
 import logging
 from typing import Callable
 from dma.utils import NER
-from .pipeline_status import PipelineStatus, PipelineUpdateType, PipelineUpdate
+from .pipeline_status import PipelineStatus, PipelineUpdate
 
 
 load_dotenv()
@@ -210,6 +210,39 @@ class Pipeline:
             self._auto_conversation.add_message(response)
             
         return response.message_text if response else None
+    
+    def _update_progress(
+        self, 
+        callback: Callable[[PipelineUpdate], None] | None,
+        status: PipelineStatus,
+        message: str | None = None,
+        progress: float = 0.0,
+        retrieval_step: RetrievalStep | None = None
+        ) -> None:
+        """
+        Update the progress of the pipeline.
+
+        Parameters
+        ----------
+        callback : Callable[[PipelineUpdate], None] | None
+            The callback to call with the update.
+        status : PipelineStatus
+            The current status of the pipeline.
+        message : str | None
+            An optional message to include with the update.
+        progress : float
+            The progress of the pipeline (0.0 to 1.0).
+        retrieval_step : RetrievalStep | None
+            An optional retrieval step to include with the update.
+        """
+        if callback is not None:
+            update = PipelineUpdate(
+                status=status,
+                message=message,
+                progress=progress,
+                retrieval_step=retrieval_step
+            )
+            callback(update)
 
     def generate(
         self, 
@@ -241,6 +274,16 @@ class Pipeline:
             The generated response if no
         """
         
+        total_steps = 1 # one for final generation
+        if self.config.max_retrieval_iterations > 0 and self.config.enable_retrieval:
+            # *2 since each retrieval iteration has a query generation and retrieval step
+            # +1 for final summary generation
+            total_steps += self.config.max_retrieval_iterations * 2 + 1
+        if self.config.enable_pre_retrieval:
+            total_steps += 2
+            
+        current_step = 0
+        
         # sanity check: we should have at least one message in the conversation
         # (the users first prompt)
         if len(conversation.messages) == 0:
@@ -266,8 +309,16 @@ class Pipeline:
 
         # prefetch entities from prompt using NER
         prompt: Message = conversation.messages[-1]
-        if prompt.message_text and prompt.role == Role.USER:
+        if prompt.message_text and prompt.role == Role.USER and self.config.enable_pre_retrieval:
+            self._update_progress(
+                progress_callback,
+                PipelineStatus.QUERY_GENERATION,
+                "Extracting entities from user prompt for pre-retrieval...",
+                current_step / total_steps
+            )
             entities = NER.get_entities(prompt.message_text)
+            current_step += 1
+            
             if len(entities) > 0:
                 logging.debug(f"Found entities in prompt: {entities}")
                 prompt.entities = entities
@@ -277,11 +328,32 @@ class Pipeline:
                 # since this is the pre-query, we don't count it against the max iterations
                 retrieval.current_iteration -= 1
                 
-                self.retriever.retrieve(pre_query, top_k=self.config.retrieval_num_results)
-            else:
-                logging.debug(f"No entities found in prompt.")
+                self._update_progress(
+                    progress_callback,
+                    PipelineStatus.RETRIEVAL,
+                    "Performing pre-retrieval based on extracted entities...",
+                    current_step / total_steps,
+                    retrieval_step=pre_step
+                )
 
-        self.retrieval_loop(conversation, retrieval)
+                self.retriever.retrieve(pre_query, top_k=self.config.retrieval_num_results)
+                
+                current_step += 1
+                
+                self._update_progress(
+                    progress_callback,
+                    PipelineStatus.RETRIEVAL_UPDATE,
+                    "Pre-retrieval completed.",
+                    current_step / total_steps,
+                    retrieval_step=pre_step
+                )
+            else:
+                current_step += 1
+                logging.debug(f"No entities found in prompt.")
+                
+
+        self.retrieval_loop(conversation, retrieval, progress_callback, current_step, total_steps)
+        current_step += self.config.max_retrieval_iterations * 2
 
                 
         # TODO: generate and add memories after retrieval
@@ -295,6 +367,14 @@ class Pipeline:
         final_summary = retrieval.finalize()
         if not final_summary or final_summary.strip() == "":
             final_summary = None
+            
+        current_step += 1
+        self._update_progress(
+            progress_callback,
+            PipelineStatus.RESPONSE_GENERATION,
+            "Generating final response...",
+            current_step / total_steps
+        )
 
         # Generate response
         # print(f"Request: {conversation}")
@@ -307,6 +387,13 @@ class Pipeline:
         marks = ['"', "'"]
         if response and response.message_text and response.message_text[0] in marks and response.message_text[-1] in marks:
             response.message_text = response.message_text[1:-1]
+            
+        self._update_progress(
+            progress_callback,
+            PipelineStatus.COMPLETED,
+            "Response generation completed.",
+            1.0
+        )
         
         return response
     
@@ -338,7 +425,7 @@ class Pipeline:
 
         return memories
     
-    def retrieval_loop(self, conversation: Conversation, retrieval: Retrieval) -> None:
+    def retrieval_loop(self, conversation: Conversation, retrieval: Retrieval, progress_callback: Callable[[PipelineUpdate], None] | None, current_step: int, total_steps: int) -> None:
         # TODO: consider adding a dedicated mechanism to decide whether to evaluate or not
         # could be sentence transformer based classifier that decides whether to evaluate or not
         # could be trained using saved conversations and whether they led to retrieval or not
@@ -368,7 +455,23 @@ class Pipeline:
         # TODO: add retriever and retrieval loop
         while not retrieval.done:
             logging.debug(f"Retrieval iteration {retrieval.current_iteration+1}/{retrieval.max_iterations}")
+            
+            self._update_progress(
+                progress_callback,
+                PipelineStatus.QUERY_GENERATION,
+                "Generating retrieval queries...",
+                current_step / total_steps
+            )
             retrieval = self.query_generator.generate_queries(conversation, retrieval)
+            current_step += 1
+            
+            self._update_progress(
+                progress_callback,
+                PipelineStatus.RETRIEVAL,
+                "Performing retrieval...",
+                current_step / total_steps,
+                retrieval_step=retrieval.steps[-1]
+            )
             
             last_step = retrieval.steps[-1]
             if len(last_step.queries) == 0 or len(last_step.results) > 0:
@@ -377,6 +480,14 @@ class Pipeline:
                 return
 
             self.retriever.retrieve(last_step, top_k=self.config.retrieval_num_results)
+            current_step += 1
+            self._update_progress(
+                progress_callback,
+                PipelineStatus.RETRIEVAL_UPDATE,
+                "Retrieval completed.",
+                current_step / total_steps,
+                retrieval_step=last_step
+            )
 
         return
     

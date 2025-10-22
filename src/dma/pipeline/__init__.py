@@ -1,2 +1,2 @@
 from .pipeline import Pipeline
-from .pipeline_status import PipelineStatus, PipelineUpdateType, PipelineUpdate
+from .pipeline_status import PipelineStatus, PipelineUpdate
