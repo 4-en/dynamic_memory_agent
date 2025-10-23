@@ -9,31 +9,45 @@ from neo4j import GraphDatabase
 import json
 import numpy as np
 
-def initialize_db(tx):
-    tx.run("""
-    // Ensure uniqueness constraint on Memory id
-    CREATE CONSTRAINT memory_id_unique IF NOT EXISTS
-    FOR (m:Memory)
-    REQUIRE m.id IS UNIQUE;
-    """)
+def initialize_db(session):
+    def create_constraints(tx):
+        tx.run("""
+        // Ensure uniqueness constraint on Memory id
+        CREATE CONSTRAINT memory_id_unique IF NOT EXISTS
+        FOR (m:Memory)
+        REQUIRE m.id IS UNIQUE;
+        """)
+        
+        tx.run("""
+        // Ensure uniqueness constraint on Entity name
+        CREATE CONSTRAINT entity_name_unique IF NOT EXISTS
+        FOR (e:Entity)
+        REQUIRE e.name IS UNIQUE;
+        """)
+        
+        tx.run("""
+        // Create vector index on Memory embedding
+        CREATE VECTOR INDEX memory_embedding_index IF NOT EXISTS
+        FOR (m:Memory)
+        ON (m.embedding)
+        OPTIONS { indexConfig: {
+            `vector.dimensions`: 384,
+            `vector.similarity_function`: 'cosine'
+        }};
+        """)
     
-    tx.run("""
-    // Ensure uniqueness constraint on Entity name
-    CREATE CONSTRAINT entity_name_unique IF NOT EXISTS
-    FOR (e:Entity)
-    REQUIRE e.name IS UNIQUE;
-    """)
-    
-    tx.run("""
-    // Create vector index on Memory embedding
-    CREATE VECTOR INDEX memory_embedding_index IF NOT EXISTS
-    FOR (m:Memory)
-    ON (m.embedding)
-    OPTIONS { indexConfig: {
-        `vector.dimensions`: 384,
-        `vector.similarity_function`: 'cosine'
-    }}
-    """)
+    def setup_storage_node(tx):
+        tx.run("""
+        // Setup general storage node
+        MERGE (s:Storage {name: 'general_storage'})
+        SET s.total_entity_connections = coalesce(s.total_entity_connections, 0)
+        SET s.last_accessed = timestamp()
+        SET s.first_created = coalesce(s.first_created, timestamp())
+        SET s.purpose = coalesce(s.purpose, "General Knowledge")
+        """)
+        
+    session.execute_write(create_constraints)
+    session.execute_write(setup_storage_node)
     
     
 
@@ -135,6 +149,10 @@ def add_memory(tx, memory: Memory):
     entities_list = [ {'name': name, 'count': count} for name, count in memory.entities.items()]
     
     query = """
+    // 0. increase general storage total_entity_connections
+    MATCH (s:Storage {name: 'general_storage'})
+    SET s.total_entity_connections = s.total_entity_connections + size($entities_list)
+    
     // 1. Find or create the single Memory node
     MERGE (m:Memory {id: $mem_id})
 
@@ -262,10 +280,10 @@ def debug_compare(a, b):
 
 
 with driver.session() as session:
-    session.execute_write(initialize_db)
     
-    # wipe the database for testing
     session.execute_write(clear_db)
+    initialize_db(session)
+    
     
     for memory in memories:
         result = session.execute_write(add_memory, memory)
