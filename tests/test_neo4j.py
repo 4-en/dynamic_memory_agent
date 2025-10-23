@@ -192,6 +192,70 @@ def find_similar_memories(tx, embedding: list, top_k: int = 5):
     result = tx.run(query, embedding=embedding, top_k=top_k, index_name=index_name)
     return [(record_to_memory(record, entities=record['entities']), record['score']) for record in result]
 
+def find_memory_by_id(tx, mem_id: str) -> Memory | None:
+    query = """
+    MATCH (m:Memory {id: $mem_id})
+    OPTIONAL MATCH (m)-[men:MENTIONS]->(e:Entity)
+    RETURN m AS node, [(m)-[men:MENTIONS]->(e:Entity) | {name: e.name, count: men.count}] AS entities
+    """
+    result = tx.run(query, mem_id=mem_id)
+    record = result.single()
+    if record is None:
+        return None
+    return record_to_memory(record, entities=record['entities'])
+
+def find_memories_by_entities(tx, entity_names: list[str], top_k: int = 5):
+    # for each entity in the list, find memories that mention it
+    # and then rank by number of other entities from the list mentioned in the memory
+    query = """
+    // 1. Unwind your input list. This is our "outer loop" for each entity.
+    UNWIND $entity_names AS primary_name
+
+    // 2. Find the primary entity node and the memories that mention it
+    MATCH (primary_e:Entity {name: primary_name})<-[:MENTIONS]-(m:Memory)
+
+    // 3. For each (primary_name, m) pair, find *other* entities from
+    //    the input list that 'm' also mentions. Use OPTIONAL MATCH
+    //    so we still get memories with a score of 0.
+    WITH primary_name, m
+    OPTIONAL MATCH (m)-[:MENTIONS]->(other_e:Entity)
+    WHERE other_e.name IN $entity_names AND other_e.name <> primary_name
+
+    // 4. Group by the primary entity and the memory, and count the "other" matches.
+    //    This is our diversity score.
+    WITH primary_name, m, COUNT(DISTINCT other_e) AS diversity_score
+
+    // 5. This is the "Top N per Group" pattern:
+    //    a. Order by the group (primary_name) and the score
+    ORDER BY primary_name, diversity_score DESC, m.last_access DESC
+
+    //    b. Collect all memories for each group into a ranked list
+    WITH primary_name, COLLECT({memory: m, score: diversity_score}) AS ranked_memories
+
+    //    c. Unwind just the top 'n' from each list
+    UNWIND ranked_memories[0..$top_n] AS result_data
+
+    // 6. Now that we have our final, filtered list of memories,
+    //    get all their entity data.
+    WITH primary_name,
+        result_data.memory AS m,
+        result_data.score AS diversity_score,
+        [(m)-[men:MENTIONS]->(e_all:Entity) | {name: e_all.name, count: men.count}] AS mentions
+
+    // 7. Return the final, structured data
+    RETURN primary_name, m AS node, diversity_score, mentions
+    """
+    result = tx.run(query, entity_names=entity_names, top_n=top_k)
+    memories = {}
+    for record in result:
+        primary_name = record['primary_name']
+        memory = record_to_memory(record, entities=record['mentions'])
+        score = record['diversity_score']
+        if primary_name not in memories:
+            memories[primary_name] = []
+        memories[primary_name].append((memory, score))
+    return memories
+
 def debug_compare(a, b):
     if a != b:
         print("Values differ:")
@@ -209,7 +273,16 @@ with driver.session() as session:
         result = session.execute_write(add_memory, memory)
         print("Added memory with id:", result['m']['id'])
         
-    
+    # try to find using entities
+    q_entities = ["james-webb-space-telescope", "jwst"]
+    found_memories = session.execute_read(find_memories_by_entities, q_entities, top_k=1)
+    print(f"Memories found by entities {q_entities}:")
+    for prim_entity, mem_list in found_memories.items():
+        print(f"Primary entity: {prim_entity}")
+        for mem, score in mem_list:
+            print(f"- Memory ID: {mem.id}, Text: {mem.memory[:50]}..., Diversity Score: {score}")
+        
+
     query_memory = memories[0]
     query_embedding = embed_text(query_memory.memory).tolist()
     similar_memories = session.execute_read(find_similar_memories, query_embedding, top_k=3)
