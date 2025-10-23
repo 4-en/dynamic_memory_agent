@@ -206,55 +206,47 @@ class Memory:
 
     def __post_init__(self):
         # add entities from memory string using NER
+        if self.id is None:
+            self.id = uuid.uuid4().hex
 
         if isinstance(self.entities, list):
             self.entities = {entity: 1 for entity in self.entities}
+        elif self.entities is None or self.entities == {}:
+            self.set_memory(self.memory)
+            return
         elif isinstance(self.entities, dict):
             pass
+        else:
+            raise ValueError("entities must be a list or dict")
 
-        entities = NER.get_entities(self.memory)
 
-        entities = [entity.lower() for entity in entities]
-        for entity in entities:
-            # find occurences of the entity in the memory
-            i = 0
-            occurences = 0
-            while i != -1:
-                i = self.memory.find(entity, i)
-                if i != -1:
-                    occurences += 1
-                    i += 1
-            occurences = max(1, occurences)
-            if entity not in self.entities:
-                self.entities[entity] = 0
-            self.entities[entity] += occurences
-
-        if self.id is None:
-            self.id = uuid.uuid4().hex
-            
         if self.embedding is None:
             self.embedding = embed_text(self.memory)
 
     def set_memory(self, memory: str):
-        old_ner = NER.get_entities(self.memory)
-        new_ner = NER.get_entities(memory)
-
-        # remove entities that were in the old memory but not in the new one
-        for entity in old_ner:
-            if entity in self.entities:
-                del self.entities[entity]
-
-        # add entities that are in the new memory
-        for entity in new_ner:
+        """
+        Set the memory string and update the embedding and entities.
+        Clears all previous entities and re-extracts them from the new memory.
+        
+        Parameters
+        ----------
+        memory : str
+            The new memory string."""
+        self.entities = {}
+        entities = NER.get_entities(memory)
+        
+        memory_countable = "-".join(memory.strip().lower().split())
+        for entity in entities:
+            # count occurrences
             i = 0
-            occurences = 0
+            occurrences = 0
             while i != -1:
-                i = memory.find(entity, i)
+                i = memory_countable.find(entity, i)
                 if i != -1:
-                    occurences += 1
+                    occurrences += 1
                     i += 1
-            occurences = max(1, occurences)
-            self.entities[entity] += occurences
+            occurrences = max(1, occurrences)
+            self.entities[entity] = occurrences
 
         self.memory = memory
         self.embedding = embed_text(self.memory)

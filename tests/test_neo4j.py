@@ -2,7 +2,7 @@
 # tests adding Memories to Neo4j and retrieving them
 
 from dma.core import Memory, TimeRelevance
-from dma.utils import embed_text
+from dma.utils import embed_text, cosine_similarity
 from dataclasses import asdict
 import time
 from neo4j import GraphDatabase
@@ -45,6 +45,21 @@ sample_texts = [
     "Hubble's mirror is a monolithic structure, meaning it is made from a single piece of glass. This design choice provides high optical quality and stability, which is essential for the precise observations Hubble conducts. The mirror's surface was polished to an accuracy of about 10 nanometers, allowing it to capture sharp images of distant celestial objects."
 ]
 
+test1 = "the-james-webb-space-telescope"
+test2 = "james-webb-space-telescope"
+test3 = "hubble-space-telescope"
+test4 = "jwst"
+emb1 = embed_text(test1)
+emb2 = embed_text(test2)
+emb3 = embed_text(test3)
+emb4 = embed_text(test4)
+sim = cosine_similarity(emb1, emb2)
+print(f"Cosine similarity between '{test1}' and '{test2}': {sim}")
+sim = cosine_similarity(emb1, emb3)
+print(f"Cosine similarity between '{test1}' and '{test3}': {sim}")
+sim = cosine_similarity(emb1, emb4)
+print(f"Cosine similarity between '{test1}' and '{test4}': {sim}")
+
 for i, text in enumerate(sample_texts):
     memory = Memory(
         memory=text,
@@ -76,20 +91,24 @@ def merge_dict_query(node_label: str, data: dict, key_field: str) -> str:
 
     return query
 
-def record_to_memory(record) -> Memory:
+def record_to_memory(record, entities: list[dict] | None = None) -> Memory:
+    
+    entities_dict = {}
+    if entities is not None:
+        for ent in entities:
+            entities_dict[ent['name']] = ent['count']
+    
     node = record['node']
     mem_dict = dict(node)
     mem_dict['embedding'] = np.array(mem_dict['embedding'])
-    mem_dict['entities'] = json.loads(mem_dict['entities'])
     mem_dict['time_relevance'] = TimeRelevance(mem_dict['time_relevance'])
-    memory = Memory(**mem_dict)
+    memory = Memory(**mem_dict, entities=entities_dict)
     return memory
 
 def add_memory(tx, memory: Memory):
     mem_id = memory.id
     mem_dict = asdict(memory)
     mem_dict['embedding'] = embed_text(memory.memory).tolist()  # convert np.ndarray to list for Neo4j storage
-    mem_dict['entities'] = json.dumps(memory.entities)  # store entities dict as JSON string
     mem_dict['time_relevance'] = memory.time_relevance.value  # store enum as its value
     
     query = """
@@ -103,8 +122,7 @@ def add_memory(tx, memory: Memory):
         m.creation_time = $data.creation_time,
         m.last_access = $data.last_access,
         m.total_access_count = $data.total_access_count,
-        m.time_relevance = $data.time_relevance,
-        m.entities = $data.entities
+        m.time_relevance = $data.time_relevance
     RETURN m
     """
     
@@ -112,19 +130,67 @@ def add_memory(tx, memory: Memory):
     # also nodes and relationships for source if applicable
     
     result = tx.run(query, data=mem_dict)
-    return result.single()
+    db_mem = result.single()
+    
+    entities_list = [ {'name': name, 'count': count} for name, count in memory.entities.items()]
+    
+    query = """
+    // 1. Find or create the single Memory node
+    MERGE (m:Memory {id: $mem_id})
+
+    WITH m
+    // 2. Unroll your list of entities
+    UNWIND $entities_list AS entity_data
+
+    // 3. Find or create the corresponding Entity node
+    MERGE (e:Entity {name: entity_data.name})
+
+    // 4. Find or create the relationship
+    MERGE (m)-[men:MENTIONS]->(e)
+        // 5. Run this ONLY IF the relationship was just CREATED
+        ON CREATE
+            SET e.mentionsCount = COALESCE(e.mentionsCount, 0) + 1
+
+    // 6. Run this EVERY TIME (on create or on match)
+    SET men.count = entity_data.count
+    """
+    tx.run(query, mem_id=mem_id, entities_list=entities_list)
+    
+    # add a mentioned with relationship for each entity with other entities in the memory
+    query = """
+    // 1. Find the memory and all entities it mentions, collecting them into a list
+    MATCH (m:Memory {id: $mem_id})-[:MENTIONS]->(e:Entity)
+    WITH COLLECT(e) AS entities
+
+    // 2. Unwind the list twice to create all possible pairs
+    UNWIND entities AS e1
+    UNWIND entities AS e2
+
+    // 3. Filter the pairs *before* merging
+    WITH e1, e2
+    WHERE e1.name < e2.name  // avoid self-relationships and duplicate pairs
+
+    // 4. Merge the relationship and update the count
+    MERGE (e1)-[r:MENTIONED_WITH]->(e2)
+        ON CREATE SET r.coMentionCount = 1
+        ON MATCH SET r.coMentionCount = r.coMentionCount + 1
+    """
+    tx.run(query, mem_id=mem_id)
+    
+    return db_mem
 
 def find_similar_memories(tx, embedding: list, top_k: int = 5):
     index_name = "memory_embedding_index"
-    query = f"""
+    query = """
     CALL db.index.vector.queryNodes($index_name, $top_k, $embedding)
     YIELD node, score
-    RETURN node, score
+    WITH node, score, [(node)-[men:MENTIONS]->(e:Entity) | {name: e.name, count: men.count}] AS entities
+    RETURN node, score, entities
     ORDER BY score DESC
     LIMIT $top_k
     """
     result = tx.run(query, embedding=embedding, top_k=top_k, index_name=index_name)
-    return [(record_to_memory(record), record['score']) for record in result]
+    return [(record_to_memory(record, entities=record['entities']), record['score']) for record in result]
 
 def debug_compare(a, b):
     if a != b:

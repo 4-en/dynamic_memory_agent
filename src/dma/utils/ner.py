@@ -16,6 +16,25 @@ class NER:
             The NLP model.
         """
         return NER._nlp
+    
+    @staticmethod
+    def normalize_entity(entity: str) -> str:
+        """
+        Normalize an entity string.
+
+        Parameters
+        ----------
+        entity : str
+            The entity string.
+
+        Returns
+        -------
+        str
+            The normalized entity string.
+        """
+        ent = entity.strip().lower()
+        ent = "-".join(ent.split())
+        return ent
 
     @staticmethod
     def get_entities(text: str) -> list[str]:
@@ -34,4 +53,8 @@ class NER:
         """
         doc = NER._nlp(text)
         allowed_entities = {"PERSON", "ORG", "GPE", "NORP", "FAC", "LOC", "PRODUCT", "EVENT", "WORK_OF_ART", "LAW", "LANGUAGE"}
-        return [ent.text for ent in doc.ents if ent.label_ in allowed_entities]
+        entities = [ent.text for ent in doc.ents if ent.label_ in allowed_entities]
+        
+        # normalize entities
+        entities = [NER.normalize_entity(ent) for ent in entities]
+        return list(set(entities))  # return unique entities
