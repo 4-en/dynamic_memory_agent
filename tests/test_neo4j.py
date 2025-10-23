@@ -208,41 +208,39 @@ def find_memories_by_entities(tx, entity_names: list[str], top_k: int = 5):
     # for each entity in the list, find memories that mention it
     # and then rank by number of other entities from the list mentioned in the memory
     query = """
-    // 1. Unwind your input list. This is our "outer loop" for each entity.
+    // 1. Unwind your input list of primary entities
     UNWIND $entity_names AS primary_name
 
-    // 2. Find the primary entity node and the memories that mention it
+    // 2. Find the primary entity and all memories mentioning it
     MATCH (primary_e:Entity {name: primary_name})<-[:MENTIONS]-(m:Memory)
 
-    // 3. For each (primary_name, m) pair, find *other* entities from
-    //    the input list that 'm' also mentions. Use OPTIONAL MATCH
-    //    so we still get memories with a score of 0.
-    WITH primary_name, m
-    OPTIONAL MATCH (m)-[:MENTIONS]->(other_e:Entity)
-    WHERE other_e.name IN $entity_names AND other_e.name <> primary_name
+    // 3. For each (primary_name, m) pair (100,000 rows),
+    //    calculate the diversity score *without* adding rows.
+    WITH primary_name, m,
+        // This sub-query in brackets runs for each 'm'
+        // It counts how many *other* entities from the list 'm' mentions
+        COUNT {
+            MATCH (m)-[:MENTIONS]->(other_e:Entity)
+            WHERE other_e.name IN $entity_names AND other_e.name <> primary_name
+        } AS diversity_score
 
-    // 4. Group by the primary entity and the memory, and count the "other" matches.
-    //    This is our diversity score.
-    WITH primary_name, m, COUNT(DISTINCT other_e) AS diversity_score
-
-    // 5. This is the "Top N per Group" pattern:
-    //    a. Order by the group (primary_name) and the score
+    // 4. Now sort the 100,000 rows. This is still the main cost,
+    //    but it's far better than sorting 900,000.
     ORDER BY primary_name, diversity_score DESC, m.last_access DESC
 
-    //    b. Collect all memories for each group into a ranked list
+    // 5. Collect into 10 groups (one per primary_name)
     WITH primary_name, COLLECT({memory: m, score: diversity_score}) AS ranked_memories
 
-    //    c. Unwind just the top 'n' from each list
+    // 6. Slice the top 'n' from each group
     UNWIND ranked_memories[0..$top_n] AS result_data
 
-    // 6. Now that we have our final, filtered list of memories,
-    //    get all their entity data.
+    // 7. Efficiently fetch the *full* entity list for the final,
+    //    filtered memories (e.g., 10 * n rows)
     WITH primary_name,
         result_data.memory AS m,
         result_data.score AS diversity_score,
         [(m)-[men:MENTIONS]->(e_all:Entity) | {name: e_all.name, count: men.count}] AS mentions
-
-    // 7. Return the final, structured data
+        
     RETURN primary_name, m AS node, diversity_score, mentions
     """
     result = tx.run(query, entity_names=entity_names, top_n=top_k)
@@ -274,8 +272,8 @@ with driver.session() as session:
         print("Added memory with id:", result['m']['id'])
         
     # try to find using entities
-    q_entities = ["james-webb-space-telescope", "jwst"]
-    found_memories = session.execute_read(find_memories_by_entities, q_entities, top_k=1)
+    q_entities = ["james-webb-space-telescope", "jwst", "senko-san"]
+    found_memories = session.execute_read(find_memories_by_entities, q_entities, top_k=3)
     print(f"Memories found by entities {q_entities}:")
     for prim_entity, mem_list in found_memories.items():
         print(f"Primary entity: {prim_entity}")
