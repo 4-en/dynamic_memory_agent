@@ -7,6 +7,7 @@ from dataclasses import asdict
 import time
 from neo4j import GraphDatabase
 import json
+import numpy as np
 
 def initialize_db(tx):
     tx.run("""
@@ -75,10 +76,19 @@ def merge_dict_query(node_label: str, data: dict, key_field: str) -> str:
 
     return query
 
+def record_to_memory(record) -> Memory:
+    node = record['node']
+    mem_dict = dict(node)
+    mem_dict['embedding'] = np.array(mem_dict['embedding'])
+    mem_dict['entities'] = json.loads(mem_dict['entities'])
+    mem_dict['time_relevance'] = TimeRelevance(mem_dict['time_relevance'])
+    memory = Memory(**mem_dict)
+    return memory
+
 def add_memory(tx, memory: Memory):
     mem_id = memory.id
     mem_dict = asdict(memory)
-    mem_dict['embedding'] = embed_text(memory.memory).flatten().tolist()  # convert np.ndarray to list for Neo4j storage
+    mem_dict['embedding'] = embed_text(memory.memory).tolist()  # convert np.ndarray to list for Neo4j storage
     mem_dict['entities'] = json.dumps(memory.entities)  # store entities dict as JSON string
     mem_dict['time_relevance'] = memory.time_relevance.value  # store enum as its value
     
@@ -104,10 +114,53 @@ def add_memory(tx, memory: Memory):
     result = tx.run(query, data=mem_dict)
     return result.single()
 
+def find_similar_memories(tx, embedding: list, top_k: int = 5):
+    index_name = "memory_embedding_index"
+    query = f"""
+    CALL db.index.vector.queryNodes($index_name, $top_k, $embedding)
+    YIELD node, score
+    RETURN node, score
+    ORDER BY score DESC
+    LIMIT $top_k
+    """
+    result = tx.run(query, embedding=embedding, top_k=top_k, index_name=index_name)
+    return [(record_to_memory(record), record['score']) for record in result]
+
+def debug_compare(a, b):
+    if a != b:
+        print("Values differ:")
+        print("A:", a)
+        print("B:", b)
+
+
 with driver.session() as session:
     session.execute_write(initialize_db)
+    
+    # wipe the database for testing
+    session.execute_write(clear_db)
+    
     for memory in memories:
         result = session.execute_write(add_memory, memory)
         print("Added memory with id:", result['m']['id'])
+        
     
-    
+    query_memory = memories[0]
+    query_embedding = embed_text(query_memory.memory).tolist()
+    similar_memories = session.execute_read(find_similar_memories, query_embedding, top_k=3)
+    print(f"Top similar memories to memory id {query_memory.id}:")
+    for mem, sim in similar_memories:
+        print(f"- Memory ID: {mem.id}, Text: {mem.memory[:50]}..., Similarity: {sim}")
+        # check if all fields are the same as the original memory
+        original_mem = next((m for m in memories if m.id == mem.id), None)
+        assert original_mem is not None, "Memory not found in original list"
+        debug_compare(mem.memory, original_mem.memory)
+        debug_compare(mem.embedding.shape, original_mem.embedding.shape)
+        debug_compare(np.allclose(mem.embedding, original_mem.embedding), True)
+        debug_compare(mem.time_relevance, original_mem.time_relevance)
+        debug_compare(mem.entities, original_mem.entities)
+        debug_compare(mem.memory_time_point, original_mem.memory_time_point)
+        debug_compare(mem.source, original_mem.source)
+        debug_compare(mem.creation_time, original_mem.creation_time)
+        debug_compare(mem.last_access, original_mem.last_access)
+        debug_compare(mem.total_access_count, original_mem.total_access_count)
+        
