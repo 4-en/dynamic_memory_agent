@@ -44,10 +44,10 @@ def initialize_db(session):
         """)
         
         tx.run("""
-        // index creation_time for faster sorting
-        CREATE INDEX memory_creation_time_index IF NOT EXISTS
+        // index memory time point for faster time-based queries
+        CREATE INDEX memory_time_point_index IF NOT EXISTS
         FOR (m:Memory)
-        ON (m.creation_time);
+        ON (m.memory_time_point);
         """)
     
     def setup_storage_node(tx):
@@ -294,6 +294,22 @@ def get_related_memories(tx, mem_id: str, top_k: int = 5) -> list[tuple[Memory, 
     result = tx.run(query, mem_id=mem_id, top_k=top_k)
     
     return [(record_to_memory(record, entities=record['entities']), record['strength']) for record in result]
+
+def get_memories_by_timepoint(tx, time_point: float, window: float = 86400 * 7, top_k: int = 5):
+    # get memories within time window around time_point
+    # sort by closeness to time_point
+    start_time = time_point - window
+    end_time = time_point + window
+    
+    query = """
+    MATCH (m:Memory)
+    WHERE m.memory_time_point >= $start_time AND m.memory_time_point <= $end_time
+    RETURN m AS memory
+    ORDER BY abs(m.memory_time_point - $time_point) ASC
+    LIMIT $top_k
+    """
+    result = tx.run(query, time_point=time_point, start_time=start_time, end_time=end_time, top_k=top_k)
+    return [record_to_memory(record) for record in result]
 
 def find_memories_by_entities(tx, entity_names: list[str], top_k: int = 5):
     # for each entity in the list, find memories that mention it
