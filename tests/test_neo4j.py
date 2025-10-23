@@ -35,6 +35,20 @@ def initialize_db(session):
             `vector.similarity_function`: 'cosine'
         }};
         """)
+        
+        tx.run("""
+        // index last_access for faster sorting
+        CREATE INDEX memory_last_access_index IF NOT EXISTS
+        FOR (m:Memory)
+        ON (m.last_access);
+        """)
+        
+        tx.run("""
+        // index creation_time for faster sorting
+        CREATE INDEX memory_creation_time_index IF NOT EXISTS
+        FOR (m:Memory)
+        ON (m.creation_time);
+        """)
     
     def setup_storage_node(tx):
         tx.run("""
@@ -48,6 +62,25 @@ def initialize_db(session):
         
     session.execute_write(create_constraints)
     session.execute_write(setup_storage_node)
+    
+def recalculate_entity_mentions(tx):
+    # Recalculate mentionsCount for all entities
+    query = """
+    MATCH (e:Entity)
+    OPTIONAL MATCH (m:Memory)-[men:MENTIONS]->(e)
+    WITH e, COUNT(m) AS mention_count
+    SET e.mentionsCount = mention_count
+    """
+    tx.run(query)
+    
+    # update total_entity_connections in storage
+    query = """
+    MATCH (s:Storage {name: 'general_storage'})
+    MATCH (e:Entity)
+    WITH s, COUNT(e.mentionsCount) AS total_connections
+    SET s.total_entity_connections = total_connections
+    """
+    tx.run(query)
     
     
 
@@ -221,6 +254,46 @@ def find_memory_by_id(tx, mem_id: str) -> Memory | None:
     if record is None:
         return None
     return record_to_memory(record, entities=record['entities'])
+
+def update_memory_access(tx, memories: list[str]):
+    query = """
+    UNWIND $mem_ids AS mem_id
+    MATCH (m:Memory {id: mem_id})
+    SET m.last_access = timestamp(),
+        m.total_access_count = coalesce(m.total_access_count, 0) + 1
+    """
+    tx.run(query, mem_ids=memories)
+    
+def connect_memories(tx, memory_ids: list[str]):
+    # connects or strengthens relationships between memories
+    # basically, memories that are often accessed together are linked more strongly
+    query = """
+    UNWIND $mem_ids AS mem_id1
+    UNWIND $mem_ids AS mem_id2
+    WITH mem_id1, mem_id2
+    WHERE mem_id1 < mem_id2  // avoid self-relationships and duplicate pairs
+    MATCH (m1:Memory {id: mem_id1})
+    MATCH (m2:Memory {id: mem_id2})
+    MERGE (m1)-[r:RELATED_TO]->(m2)
+        ON CREATE SET r.connection_strength = 1
+        ON MATCH SET r.connection_strength = r.connection_strength + 1
+    """
+    tx.run(query, mem_ids=memory_ids)
+    
+def get_related_memories(tx, mem_id: str, top_k: int = 5) -> list[tuple[Memory, float]]:
+    query = """
+    MATCH (m:Memory {id: $mem_id})-[r:RELATED_TO]-(related:Memory)
+    OPTIONAL MATCH (related)-[men:MENTIONS]->(e:Entity)
+    
+    // sort by connection strength and return top k
+    RETURN related AS node, r.connection_strength AS strength,
+        [(related)-[men:MENTIONS]->(e:Entity) | {name: e.name, count: men.count}] AS entities
+    ORDER BY r.connection_strength DESC
+    LIMIT $top_k
+    """
+    result = tx.run(query, mem_id=mem_id, top_k=top_k)
+    
+    return [(record_to_memory(record, entities=record['entities']), record['strength']) for record in result]
 
 def find_memories_by_entities(tx, entity_names: list[str], top_k: int = 5):
     # for each entity in the list, find memories that mention it
