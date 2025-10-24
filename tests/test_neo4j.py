@@ -516,7 +516,12 @@ def get_memories_by_timepoint(tx, time_point: float, window: float = 86400 * 7, 
     query = """
     MATCH (m:Memory)
     WHERE m.memory_time_point >= $start_time AND m.memory_time_point <= $end_time
-    RETURN m AS memory
+    WITH m,
+        [(m)-[men:MENTIONS]->(e_all:Entity) | {name: e_all.name, count: men.count}] AS entities,
+        [(m)-[:AUTHORED_BY]->(a:Author) | a.name] AS authors,
+        head([(m)-[:SOURCED_FROM]->(s:Source) | s.name]) AS source
+
+    RETURN m AS memory, entities, authors, source
     ORDER BY abs(m.memory_time_point - $time_point) ASC
     LIMIT $top_k
     """
@@ -558,9 +563,11 @@ def find_memories_by_entities(tx, entity_names: list[str], top_k: int = 5):
     WITH primary_name,
         result_data.memory AS m,
         result_data.score AS diversity_score,
-        [(m)-[men:MENTIONS]->(e_all:Entity) | {name: e_all.name, count: men.count}] AS mentions
-        
-    RETURN primary_name, m AS node, diversity_score, mentions
+        [(m)-[men:MENTIONS]->(e_all:Entity) | {name: e_all.name, count: men.count}] AS entities,
+        [(m)-[:AUTHORED_BY]->(a:Author) | a.name] AS authors,
+        head([(m)-[:SOURCED_FROM]->(s:Source) | s.name]) AS source
+
+    RETURN primary_name, m AS node, diversity_score, entities, authors, source
     """
     result = tx.run(query, entity_names=entity_names, top_n=top_k)
     memories = {}
