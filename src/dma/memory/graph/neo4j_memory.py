@@ -151,9 +151,6 @@ class Neo4jMemory(GraphMemory):
         RETURN m.id AS mem_id
         """
         
-        # TODO: also create Entity nodes and relationships
-        # also nodes and relationships for source if applicable
-        
         result = tx.run(query, data=mem_dict, entities_list=entities_list)
         db_mem = result.single()
         
