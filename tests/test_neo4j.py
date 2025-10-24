@@ -2,6 +2,7 @@
 # tests adding Memories to Neo4j and retrieving them
 
 from dma.core import Memory, TimeRelevance
+from dma.core.sources import Source, SourceType
 from dma.utils import embed_text, cosine_similarity
 from dataclasses import asdict
 import time
@@ -115,6 +116,11 @@ for i, text in enumerate(sample_texts):
         memory_time_point=time.time() - i * 86400 * 7,  # spaced a week apart
         
     )
+    
+    if i == 0:
+        # add a source for first memory
+        memory.source = Source.from_web("https://example.com/jwst", authors=["Jane Doe", "John Smith"], publisher="Example Publisher")
+    
     print(f"Created memory with id: {memory.id} and embedding shape: {memory.embedding.shape}")
     memories.append(memory)
     
@@ -138,15 +144,55 @@ def merge_dict_query(node_label: str, data: dict, key_field: str) -> str:
 
     return query
 
-def record_to_memory(record, entities: list[dict] | None = None) -> Memory:
-    
+def record_to_memory(record) -> Memory:
+
+    node = record['node']
+
     entities_dict = {}
+    entities = record.get('entities', None)
     if entities is not None:
         for ent in entities:
             entities_dict[ent['name']] = ent['count']
-    
-    node = record['node']
+            
+    authors_list = record.get('authors', [])
+    source = record.get('source', None)
+        
+    source_obj = None
+    source_type = node.get('source_type', None)
+    full_source = node.get('full_source', None)
+    publisher = node.get('publisher', None)
+
+    if source is not None:
+        # print(f"Source type: {source_type}, full_source: {full_source}, source: {source}, authors: {authors_list}, publisher: {publisher}")
+        source_obj = Source(
+            source_type=SourceType(source_type) if source_type else SourceType.OTHER,
+            full_source=full_source,
+            source=source,
+            authors=authors_list,
+            publisher=publisher
+        )
+    elif full_source is not None and source_type is not None:
+        source_obj = Source.from_source_type(
+            source_type=SourceType(source_type),
+            full_source=full_source,
+            authors=authors_list,
+            publisher=publisher
+        )
+
     mem_dict = dict(node)
+    # clear source fields that are now in source_obj
+    if 'full_source' in mem_dict:
+        del mem_dict['full_source']
+    if 'source' in mem_dict:
+        del mem_dict['source']
+    if 'authors' in mem_dict:
+        del mem_dict['authors']
+    if 'publisher' in mem_dict:
+        del mem_dict['publisher']
+    if 'source_type' in mem_dict:
+        del mem_dict['source_type']
+    if source_obj is not None:
+        mem_dict['source'] = source_obj
     mem_dict['embedding'] = np.array(mem_dict['embedding'])
     mem_dict['time_relevance'] = TimeRelevance(mem_dict['time_relevance'])
     memory = Memory(**mem_dict, entities=entities_dict)
@@ -157,19 +203,54 @@ def add_memory(tx, memory: Memory):
     mem_dict = asdict(memory)
     mem_dict['embedding'] = embed_text(memory.memory).tolist()  # convert np.ndarray to list for Neo4j storage
     mem_dict['time_relevance'] = memory.time_relevance.value  # store enum as its value
+    mem_dict['full_source'] = memory.source.full_source if memory.source else None
+    mem_dict['source'] = memory.source.source if memory.source else None
+    mem_dict['authors'] = memory.source.authors if memory.source else []
+    mem_dict['publisher'] = memory.source.publisher if memory.source else None
+    mem_dict['source_type'] = memory.source.source_type.value if memory.source else None
     
     query = """
+    // Create or find the main node
     MERGE (m:Memory {id: $data.id})
     SET m.memory = $data.memory,
         m.topic = $data.topic,
         m.truthfulness = $data.truthfulness,
         m.embedding = $data.embedding,
         m.memory_time_point = $data.memory_time_point,
-        m.source = $data.source,
+        m.full_source = $data.full_source,
+        m.publisher = $data.publisher,
+        m.source_type = $data.source_type,
         m.creation_time = $data.creation_time,
         m.last_access = $data.last_access,
         m.total_access_count = $data.total_access_count,
         m.time_relevance = $data.time_relevance
+        
+    // Use CALL for optional author merging
+    // This pattern is correct for a LIST
+    WITH m
+    CALL (m) {
+        
+        // 2. Filter the list *before* unwinding
+        WITH m, [author IN $data.authors WHERE author IS NOT NULL] AS filtered_authors
+        UNWIND filtered_authors AS author
+        MERGE (a:Author {name: author})
+        MERGE (m)-[:AUTHORED_BY]->(a)
+    }
+    
+    // Use CALL for optional source merging
+    // This pattern is correct for a SINGLE VALUE
+    WITH m
+    CALL (m) {
+        // 2. Add a 'normal' WITH statement *after* the import.
+        // This satisfies the syntax requirement.
+        WITH m
+        // 2. Now, do your logic using the '$data' parameter
+        WHERE $data.source IS NOT NULL 
+        MERGE (s:Source {name: $data.source})
+        MERGE (m)-[:SOURCED_FROM]->(s)
+    }
+    
+    // 'm' was never filtered, so it will always be returned
     RETURN m
     """
     
@@ -178,6 +259,8 @@ def add_memory(tx, memory: Memory):
     
     result = tx.run(query, data=mem_dict)
     db_mem = result.single()
+    
+    print("Added/Updated memory with id:", db_mem['m']['id'])
     
     entities_list = [ {'name': name, 'count': count} for name, count in memory.entities.items()]
     
@@ -235,13 +318,20 @@ def find_similar_memories(tx, embedding: list, top_k: int = 5):
     query = """
     CALL db.index.vector.queryNodes($index_name, $top_k, $embedding)
     YIELD node, score
-    WITH node, score, [(node)-[men:MENTIONS]->(e:Entity) | {name: e.name, count: men.count}] AS entities
-    RETURN node, score, entities
+
+    // --- FIX IS HERE ---
+    OPTIONAL MATCH (node)-[:SOURCED_FROM]->(s:Source)
+
+    WITH node, score, 
+        [(node)-[men:MENTIONS]->(e:Entity) | {name: e.name, count: men.count}] AS entities, 
+        [(node)-[:AUTHORED_BY]->(a:Author) | a.name] AS authors, 
+        s.name AS source // This will be null if s is null
+    RETURN node, score, entities, authors, source
     ORDER BY score DESC
-    LIMIT $top_k
+    // LIMIT $top_k // This is probably not needed, see note below
     """
     result = tx.run(query, embedding=embedding, top_k=top_k, index_name=index_name)
-    return [(record_to_memory(record, entities=record['entities']), record['score']) for record in result]
+    return [(record_to_memory(record), record['score']) for record in result]
 
 def find_memory_by_id(tx, mem_id: str) -> Memory | None:
     query = """
@@ -253,7 +343,7 @@ def find_memory_by_id(tx, mem_id: str) -> Memory | None:
     record = result.single()
     if record is None:
         return None
-    return record_to_memory(record, entities=record['entities'])
+    return record_to_memory(record)
 
 def update_memory_access(tx, memories: list[str]):
     query = """
@@ -292,8 +382,8 @@ def get_related_memories(tx, mem_id: str, top_k: int = 5) -> list[tuple[Memory, 
     LIMIT $top_k
     """
     result = tx.run(query, mem_id=mem_id, top_k=top_k)
-    
-    return [(record_to_memory(record, entities=record['entities']), record['strength']) for record in result]
+
+    return [(record_to_memory(record), record['strength']) for record in result]
 
 
 def add_memory_series(tx, memories: list[Memory]):
@@ -463,7 +553,7 @@ def find_memories_by_entities(tx, entity_names: list[str], top_k: int = 5):
     memories = {}
     for record in result:
         primary_name = record['primary_name']
-        memory = record_to_memory(record, entities=record['mentions'])
+        memory = record_to_memory(record)
         score = record['diversity_score']
         if primary_name not in memories:
             memories[primary_name] = []
@@ -483,11 +573,11 @@ with driver.session() as session:
     initialize_db(session)
     
     
-    #for memory in memories:
-        #result = session.execute_write(add_memory, memory)
-        #print("Added memory with id:", result['m']['id'])
+    for memory in memories:
+        result = session.execute_write(add_memory, memory)
+        print("Added memory with id:", result['m']['id'])
 
-    session.execute_write(add_memory_batch, memories)
+    # session.execute_write(add_memory_batch, memories)
 
     # try to find using entities
     q_entities = ["james-webb-space-telescope", "jwst", "senko-san"]

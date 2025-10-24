@@ -179,6 +179,7 @@ import time
 import math
 from dma.utils.ner import NER
 from dma.utils.text_embedding import embed_text
+from .sources import Source
 
 @dataclass
 class Memory:
@@ -192,7 +193,7 @@ class Memory:
     time_relevance: TimeRelevance = TimeRelevance.ALWAYS
     truthfulness: float = 1.0 # The estimated truthfulness of the memory, 1.0 is probably completely true, 0.0 is probably completely false
     memory_time_point: float = -1 # The time the memory is about (not the time the memory was created)
-    source: str = "unknown" # The source of the memory, e.g. a person or a website
+    source: Source = None # The source of the memory
     embedding: np.ndarray = None # The embedding of the memory
     creation_time: float = field(default_factory=time.time) # The time the memory was created
     last_access: float = field(default_factory=time.time) # The last time this memory was accessed
@@ -208,6 +209,9 @@ class Memory:
         # add entities from memory string using NER
         if self.id is None:
             self.id = uuid.uuid4().hex
+            
+        if isinstance(self.source, str):
+            self.source = Source.from_string(self.source)
 
         if isinstance(self.entities, list):
             self.entities = {entity: 1 for entity in self.entities}
