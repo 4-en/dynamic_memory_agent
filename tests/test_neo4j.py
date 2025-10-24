@@ -337,7 +337,12 @@ def find_memory_by_id(tx, mem_id: str) -> Memory | None:
     query = """
     MATCH (m:Memory {id: $mem_id})
     OPTIONAL MATCH (m)-[men:MENTIONS]->(e:Entity)
-    RETURN m AS node, [(m)-[men:MENTIONS]->(e:Entity) | {name: e.name, count: men.count}] AS entities
+    OPTIONAL MATCH (m)-[:AUTHORED_BY]->(a:Author)
+    OPTIONAL MATCH (m)-[:SOURCED_FROM]->(s:Source)
+
+    RETURN m AS node, [(m)-[men:MENTIONS]->(e:Entity) | {name: e.name, count: men.count}] AS entities, 
+           [(m)-[:AUTHORED_BY]->(a:Author) | a.name] AS authors, 
+           s.name AS source
     """
     result = tx.run(query, mem_id=mem_id)
     record = result.single()
