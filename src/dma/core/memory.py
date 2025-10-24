@@ -181,6 +181,14 @@ from dma.utils.ner import NER
 from dma.utils.text_embedding import embed_text
 from .sources import Source
 
+def time_ms():
+    return int(time.time() * 1000)
+
+class FeedbackType(Enum):
+    POSITIVE = 1
+    NEGATIVE = -1
+    NEUTRAL = 0
+
 @dataclass
 class Memory:
     """
@@ -195,9 +203,11 @@ class Memory:
     memory_time_point: float = -1 # The time the memory is about (not the time the memory was created)
     source: Source = None # The source of the memory
     embedding: np.ndarray = None # The embedding of the memory
-    creation_time: float = field(default_factory=time.time) # The time the memory was created
-    last_access: float = field(default_factory=time.time) # The last time this memory was accessed
+    creation_time: float = field(default_factory=time_ms) # The time the memory was created
+    last_access: float = field(default_factory=time_ms) # The last time this memory was accessed
     total_access_count: int = 0 # The total number of times this memory was accessed
+    positive_access_count: int = 0 # The number of times this memory was accessed with a positive feedback
+    negative_access_count: int = 0 # The number of times this memory was accessed with a negative feedback
     id: str = None # The ID of the memory
 
     # TODO: possible additional fields for future versions:

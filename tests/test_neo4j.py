@@ -1,7 +1,7 @@
 # neo4j test
 # tests adding Memories to Neo4j and retrieving them
 
-from dma.core import Memory, TimeRelevance
+from dma.core import Memory, TimeRelevance, FeedbackType
 from dma.core.sources import Source, SourceType
 from dma.utils import embed_text, cosine_similarity
 from dataclasses import asdict
@@ -223,6 +223,8 @@ def add_memory(tx, memory: Memory):
         m.creation_time = $data.creation_time,
         m.last_access = $data.last_access,
         m.total_access_count = $data.total_access_count,
+        m.positive_access_count = $data.positive_access_count,
+        m.negative_access_count = $data.negative_access_count,
         m.time_relevance = $data.time_relevance
         
     // Use CALL for optional author merging
@@ -350,13 +352,19 @@ def find_memory_by_id(tx, mem_id: str) -> Memory | None:
         return None
     return record_to_memory(record)
 
-def update_memory_access(tx, memories: list[str]):
+def update_memory_access(tx, memories: list[str], feedback: FeedbackType=FeedbackType.NEUTRAL):
     query = """
     UNWIND $mem_ids AS mem_id
     MATCH (m:Memory {id: mem_id})
     SET m.last_access = timestamp(),
         m.total_access_count = coalesce(m.total_access_count, 0) + 1
     """
+    
+    if feedback == FeedbackType.POSITIVE:
+        query += ", m.positive_access_count = coalesce(m.positive_access_count, 0) + 1"
+    elif feedback == FeedbackType.NEGATIVE:
+        query += ", m.negative_access_count = coalesce(m.negative_access_count, 0) + 1"
+
     tx.run(query, mem_ids=memories)
     
 def connect_memories(tx, memory_ids: list[str]):
@@ -565,13 +573,13 @@ def find_memories_by_entities(tx, entity_names: list[str], top_k: int = 5):
         memories[primary_name].append((memory, score))
     return memories
 
-def debug_compare(a, b):
+def debug_compare(a, b, name="value"):
     if a != b:
-        print("Values differ:")
+        print(f"Mismatch in {name}:")
         print("A:", a)
         print("B:", b)
 
-
+import random
 with driver.session() as session:
     
     session.execute_write(clear_db)
@@ -592,6 +600,11 @@ with driver.session() as session:
         print(f"Primary entity: {prim_entity}")
         for mem, score in mem_list:
             print(f"- Memory ID: {mem.id}, Text: {mem.memory[:50]}..., Diversity Score: {score}")
+            # give random feedback
+            feedback = random.choice([FeedbackType.POSITIVE, FeedbackType.NEGATIVE, FeedbackType.NEUTRAL])
+            session.execute_write(update_memory_access, [mem.id], feedback=feedback)
+            
+            
         
 
     query_memory = memories[0]
@@ -603,14 +616,14 @@ with driver.session() as session:
         # check if all fields are the same as the original memory
         original_mem = next((m for m in memories if m.id == mem.id), None)
         assert original_mem is not None, "Memory not found in original list"
-        debug_compare(mem.memory, original_mem.memory)
-        debug_compare(mem.embedding.shape, original_mem.embedding.shape)
-        debug_compare(np.allclose(mem.embedding, original_mem.embedding), True)
-        debug_compare(mem.time_relevance, original_mem.time_relevance)
-        debug_compare(mem.entities, original_mem.entities)
-        debug_compare(mem.memory_time_point, original_mem.memory_time_point)
-        debug_compare(mem.source, original_mem.source)
-        debug_compare(mem.creation_time, original_mem.creation_time)
-        debug_compare(mem.last_access, original_mem.last_access)
-        debug_compare(mem.total_access_count, original_mem.total_access_count)
-        
+        debug_compare(mem.memory, original_mem.memory, "memory")
+        debug_compare(mem.embedding.shape, original_mem.embedding.shape, "embedding shape")
+        debug_compare(np.allclose(mem.embedding, original_mem.embedding), True, "embedding")
+        debug_compare(mem.time_relevance, original_mem.time_relevance, "time_relevance")
+        debug_compare(mem.entities, original_mem.entities, "entities")
+        debug_compare(mem.memory_time_point, original_mem.memory_time_point, "memory_time_point")
+        debug_compare(mem.source, original_mem.source, "source")
+        debug_compare(mem.creation_time, original_mem.creation_time, "creation_time")
+        # these should be different due to access update:
+        #debug_compare(mem.last_access, original_mem.last_access, "last_access")
+        #debug_compare(mem.total_access_count, original_mem.total_access_count, "total_access_count")
