@@ -93,21 +93,6 @@ sample_texts = [
     "Hubble's mirror is a monolithic structure, meaning it is made from a single piece of glass. This design choice provides high optical quality and stability, which is essential for the precise observations Hubble conducts. The mirror's surface was polished to an accuracy of about 10 nanometers, allowing it to capture sharp images of distant celestial objects."
 ]
 
-test1 = "the-james-webb-space-telescope"
-test2 = "james-webb-space-telescope"
-test3 = "hubble-space-telescope"
-test4 = "jwst"
-emb1 = embed_text(test1)
-emb2 = embed_text(test2)
-emb3 = embed_text(test3)
-emb4 = embed_text(test4)
-sim = cosine_similarity(emb1, emb2)
-print(f"Cosine similarity between '{test1}' and '{test2}': {sim}")
-sim = cosine_similarity(emb1, emb3)
-print(f"Cosine similarity between '{test1}' and '{test3}': {sim}")
-sim = cosine_similarity(emb1, emb4)
-print(f"Cosine similarity between '{test1}' and '{test4}': {sim}")
-
 for i, text in enumerate(sample_texts):
     memory = Memory(
         memory=text,
@@ -250,8 +235,7 @@ def add_memory(tx, memory: Memory) -> str:
     // This pattern is correct for a LIST
     WITH m
     CALL (m) {
-        
-        // 2. Filter the list *before* unwinding
+        // Filter the list *before* unwinding
         WITH m, [author IN $data.authors WHERE author IS NOT NULL] AS filtered_authors
         UNWIND filtered_authors AS author
         MERGE (a:Author {name: author})
@@ -452,8 +436,14 @@ def add_memory_series(tx, memories: list[Memory]):
         mem_dict = asdict(memory)
         mem_dict['embedding'] = embed_text(memory.memory).tolist()  # convert np.ndarray to list for Neo4j storage
         mem_dict['time_relevance'] = memory.time_relevance.value  # store enum as its value
-        mem_dicts.append(mem_dict)
         mem_dict["entities"] = [ {'name': name, 'count': count} for name, count in memory.entities.items()]
+        mem_dict["full_source"] = memory.source.full_source if memory.source else None
+        mem_dict["source"] = memory.source.source if memory.source else None
+        mem_dict["authors"] = memory.source.authors if memory.source else []
+        mem_dict["publisher"] = memory.source.publisher if memory.source else None
+        mem_dict["source_type"] = memory.source.source_type.value if memory.source else None
+        
+        mem_dicts.append(mem_dict)
         
     query = """
     UNWIND $mem_dicts AS data
@@ -463,56 +453,105 @@ def add_memory_series(tx, memories: list[Memory]):
         m.truthfulness = data.truthfulness,
         m.embedding = data.embedding,
         m.memory_time_point = data.memory_time_point,
-        m.source = data.source,
+        m.full_source = data.full_source,
+        m.publisher = data.publisher,
+        m.source_type = data.source_type,
         m.creation_time = data.creation_time,
         m.last_access = data.last_access,
         m.total_access_count = data.total_access_count,
+        m.positive_access_count = data.positive_access_count,
+        m.negative_access_count = data.negative_access_count,
         m.time_relevance = data.time_relevance
 
-    // --- FIX PART 1: ---
-    // Collect 'm' and 'data' *before* the entity fan-out.
-    // This preserves the initial order from $mem_dicts.
-    WITH collect({m: m, data: data}) AS memDataPairs
-
-    // --- FIX PART 2: ---
-    // Extract the ordered list of memories *now* for the final step.
-    // We also keep the 'memDataPairs' list to process entities.
-    WITH [pair IN memDataPairs | pair.m] AS memories, memDataPairs
-
-    // --- FIX PART 3: ---
-    // Unwind the pairs to do the per-memory entity logic.
-    // We pass the 'memories' list along for each row.
-    UNWIND memDataPairs AS pair
-    WITH memories, pair.m AS m, pair.data AS data
+    // Use CALL for optional author merging
+    WITH m, data
+    CALL (m, data) {
+        WITH m, [author IN data.authors WHERE author IS NOT NULL] AS filtered_authors
+        UNWIND filtered_authors AS author
+        MERGE (a:Author {name: author})
+        MERGE (m)-[:AUTHORED_BY]->(a)
+    }
+    
+    // Use CALL for optional source merging
+    WITH m, data
+    CALL (m, data) {
+        WITH m, data
+        WHERE data.source IS NOT NULL 
+        MERGE (s:Source {name: data.source})
+        MERGE (m)-[:SOURCED_FROM]->(s)
+    }
         
     // add entities and relationships
     // increase general storage total_entity_connections
+    WITH m, data
     MATCH (s:Storage {name: 'general_storage'})
     SET s.total_entity_connections = s.total_entity_connections + size(data.entities)
+    
+    WITH m, data.entities as entities
+    
+    CALL(m, entities) {
+        WITH m, entities
+        UNWIND entities AS entity_data
 
-    WITH memories, m, data
-    UNWIND data.entities AS entity_data
-    MERGE (e:Entity {name: entity_data.name})
-    MERGE (m)-[men:MENTIONS]->(e)
-        ON CREATE SET e.mentionsCount = COALESCE(e.mentionsCount, 0) + 1
+        MERGE (e:Entity {name: entity_data.name})
+            ON CREATE SET e.mentionsCount = COALESCE(e.mentionsCount, 0) + 1
+        MERGE (m)-[men:MENTIONS]->(e)
+            ON CREATE SET men.isNew = true
+        SET men.count = entity_data.count
         
-    SET men.count = entity_data.count
+        // Collect all entities for this memory
+        WITH m, collect(e) AS entity_nodes 
 
-    // --- FIX PART 4: ---
-    // The entity UNWIND created many rows, but 'memories' is the
-    // *same correct list* [m1, m2, ...] on every row.
-    // We use DISTINCT to collapse back to a single row
-    // carrying our correct, ordered 'memories' list.
-    WITH DISTINCT memories
+        // 1. Run co-mention logic in an ISOLATED subquery.
+        //    This subquery can produce 0 rows (for 1-entity memories)
+        //    without stopping the main flow.
+        CALL(m, entity_nodes) {
+            WITH m, entity_nodes // Import the full list
+            UNWIND entity_nodes AS e1
+            UNWIND entity_nodes AS e2
+            WITH m, e1, e2
+            WHERE e1.name < e2.name
+            
+            MATCH (m)-[men1:MENTIONS]->(e1)
+            MATCH (m)-[men2:MENTIONS]->(e2)
+            WHERE men1.isNew = true OR men2.isNew = true
+            
+            MERGE (e1)-[r:MENTIONED_WITH]->(e2)
+                ON CREATE SET r.coMentionCount = 1
+                ON MATCH SET r.coMentionCount = r.coMentionCount + 1
+        }
         
-    // connect memories in series based on initial order
-    // This logic now runs on the correct list (e.g., [m1, m2, m3])
-    // and will not create self-loops.
-    UNWIND range(0, size(memories) - 2) AS idx
-    WITH memories[idx] AS m1, memories[idx + 1] AS m2
+        // 2. Cleanup logic.
+        //    This code runs *after* the subquery is complete.
+        //    'm' and 'entity_nodes' are still in scope from the 'WITH'
+        //    *before* the subquery.
+        //    This part is no longer affected by the 0-row result
+        //    of the co-mention logic.
+        
+        UNWIND entity_nodes AS e_node
+        MATCH (m)-[men:MENTIONS]->(e_node)
+        WHERE men.isNew = true
+        REMOVE men.isNew
+    }
+    
+    WITH DISTINCT m
+    // connect memories in series
+    WITH collect(m) AS mems
+    UNWIND range(0, size(mems) - 2) AS idx
+    WITH mems[idx] AS m1, mems[idx + 1] AS m2, mems
     MERGE (m1)-[r:NEXT_IN_SERIES]->(m2)
+    
+    WITH mems
+    UNWIND mems AS m
+    RETURN m.id AS mem_id   
     """
-    tx.run(query, mem_dicts=mem_dicts)
+    result = tx.run(query, mem_dicts=mem_dicts)
+    
+    ids = [record.get('mem_id', None) for record in result]
+    ids = [id for id in ids if id is not None]
+    if len(ids) != len(memories):
+        print(f"Warning: only {len(ids)} out of {len(memories)} memories were added successfully.")
+    return ids
     
 def add_memory_batch(tx, memories: list[Memory]):
     # adds a batch of memories without connecting them
@@ -521,8 +560,14 @@ def add_memory_batch(tx, memories: list[Memory]):
         mem_dict = asdict(memory)
         mem_dict['embedding'] = embed_text(memory.memory).tolist()  # convert np.ndarray to list for Neo4j storage
         mem_dict['time_relevance'] = memory.time_relevance.value  # store enum as its value
-        mem_dicts.append(mem_dict)
         mem_dict["entities"] = [ {'name': name, 'count': count} for name, count in memory.entities.items()]
+        mem_dict["full_source"] = memory.source.full_source if memory.source else None
+        mem_dict["source"] = memory.source.source if memory.source else None
+        mem_dict["authors"] = memory.source.authors if memory.source else []
+        mem_dict["publisher"] = memory.source.publisher if memory.source else None
+        mem_dict["source_type"] = memory.source.source_type.value if memory.source else None
+        
+        mem_dicts.append(mem_dict)
         
     query = """
     UNWIND $mem_dicts AS data
@@ -532,24 +577,97 @@ def add_memory_batch(tx, memories: list[Memory]):
         m.truthfulness = data.truthfulness,
         m.embedding = data.embedding,
         m.memory_time_point = data.memory_time_point,
-        m.source = data.source,
+        m.full_source = data.full_source,
+        m.publisher = data.publisher,
+        m.source_type = data.source_type,
         m.creation_time = data.creation_time,
         m.last_access = data.last_access,
         m.total_access_count = data.total_access_count,
+        m.positive_access_count = data.positive_access_count,
+        m.negative_access_count = data.negative_access_count,
         m.time_relevance = data.time_relevance
+
+    // Use CALL for optional author merging
+    WITH m, data
+    CALL (m, data) {
+        WITH m, [author IN data.authors WHERE author IS NOT NULL] AS filtered_authors
+        UNWIND filtered_authors AS author
+        MERGE (a:Author {name: author})
+        MERGE (m)-[:AUTHORED_BY]->(a)
+    }
+    
+    // Use CALL for optional source merging
+    WITH m, data
+    CALL (m, data) {
+        WITH m, data
+        WHERE data.source IS NOT NULL 
+        MERGE (s:Source {name: data.source})
+        MERGE (m)-[:SOURCED_FROM]->(s)
+    }
+        
     // add entities and relationships
     // increase general storage total_entity_connections
     WITH m, data
     MATCH (s:Storage {name: 'general_storage'})
     SET s.total_entity_connections = s.total_entity_connections + size(data.entities)
-    WITH m, data
-    UNWIND data.entities AS entity_data
-    MERGE (e:Entity {name: entity_data.name})
-    MERGE (m)-[men:MENTIONS]->(e)
-        ON CREATE SET e.mentionsCount = COALESCE(e.mentionsCount, 0) + 1
-    SET men.count = entity_data.count
+    WITH m, data.entities as entities
+    
+    CALL(m, entities) {
+        WITH m, entities
+        UNWIND entities AS entity_data
+
+        MERGE (e:Entity {name: entity_data.name})
+            ON CREATE SET e.mentionsCount = COALESCE(e.mentionsCount, 0) + 1
+        MERGE (m)-[men:MENTIONS]->(e)
+            ON CREATE SET men.isNew = true
+        SET men.count = entity_data.count
+        
+        // Collect all entities for this memory
+        WITH m, collect(e) AS entity_nodes 
+
+        // 1. Run co-mention logic in an ISOLATED subquery.
+        //    This subquery can produce 0 rows (for 1-entity memories)
+        //    without stopping the main flow.
+        CALL(m, entity_nodes) {
+            WITH m, entity_nodes // Import the full list
+            UNWIND entity_nodes AS e1
+            UNWIND entity_nodes AS e2
+            WITH m, e1, e2
+            WHERE e1.name < e2.name
+            
+            MATCH (m)-[men1:MENTIONS]->(e1)
+            MATCH (m)-[men2:MENTIONS]->(e2)
+            WHERE men1.isNew = true OR men2.isNew = true
+            
+            MERGE (e1)-[r:MENTIONED_WITH]->(e2)
+                ON CREATE SET r.coMentionCount = 1
+                ON MATCH SET r.coMentionCount = r.coMentionCount + 1
+        }
+        
+        // 2. Cleanup logic.
+        //    This code runs *after* the subquery is complete.
+        //    'm' and 'entity_nodes' are still in scope from the 'WITH'
+        //    *before* the subquery.
+        //    This part is no longer affected by the 0-row result
+        //    of the co-mention logic.
+        
+        UNWIND entity_nodes AS e_node
+        MATCH (m)-[men:MENTIONS]->(e_node)
+        WHERE men.isNew = true
+        REMOVE men.isNew
+    }
+    
+    WITH m
+     
+    RETURN m.id AS mem_id   
     """
-    tx.run(query, mem_dicts=mem_dicts)
+    result = tx.run(query, mem_dicts=mem_dicts)
+
+    ids = [record.get('mem_id', None) for record in result]
+    ids = [id for id in ids if id is not None]
+    if len(ids) != len(memories):
+        print(f"Warning: only {len(ids)} out of {len(memories)} memories were added successfully.")
+    return ids
 
 def get_memories_by_timepoint(tx, time_point: float, window: float = 86400 * 7, top_k: int = 5):
     # get memories within time window around time_point
@@ -637,11 +755,11 @@ with driver.session() as session:
     initialize_db(session)
     
     
-    for memory in memories:
-        result = session.execute_write(add_memory, memory)
-        print("Added memory with id:", result)
+    #for memory in memories:
+    #    result = session.execute_write(add_memory, memory)
+    #    print("Added memory with id:", result)
 
-    # session.execute_write(add_memory_batch, memories)
+    session.execute_write(add_memory_series, memories)
 
     # try to find using entities
     q_entities = ["james-webb-space-telescope", "jwst", "senko-san"]
