@@ -2,8 +2,7 @@ from dma.core import RetrievalStep, EntityQuery, EmbeddingQuery, RetrievalQuery,
 from dma.core import Conversation, Message
 from dma.core import Memory, MemoryResult
 
-from .graph import GraphMemory, Neo4jPlaceholder
-from .vector import VectorMemory, FaissPlaceholder
+from .graph import GraphMemory, Neo4jMemory
 
 from dma.config.dma_config import get_config
 
@@ -18,15 +17,31 @@ class Retriever:
     def __init__(self):
         self.config = get_config()
         
-        # TODO: initialize actual memory backends here
-        self.graph_memory: GraphMemory = Neo4jPlaceholder()
-        self.vector_memory: VectorMemory = FaissPlaceholder()
+        # TODO: initialize actual memory backend
+        self.graph_memory = Neo4jMemory()
+        
         
     def add_memory(self, memory: Memory):
         raise NotImplementedError("Method not implemented yet.")
     
     def add_memories(self, memories: list[Memory]):
         # might be useful to add in batch for efficiency
+        raise NotImplementedError("Method not implemented yet.")
+    
+    def add_memory_series(self, memories: list[Memory]):
+        """Add a series of memories to the memory backend.
+        Memories in a series are linked together in order.
+        
+        Parameters
+        ----------
+        memories : list[Memory]
+            The list of memory objects to add.
+        
+        Returns
+        -------
+        bool
+            True if the memories were added successfully, False otherwise.
+        """
         raise NotImplementedError("Method not implemented yet.")
     
     def retrieve(self, query: RetrievalStep, top_k: int = 5) -> list[MemoryResult]:

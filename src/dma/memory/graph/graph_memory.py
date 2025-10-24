@@ -1,30 +1,196 @@
 
 from abc import ABC, abstractmethod
+from dma.core.memory import Memory, FeedbackType
+from .graph_result import GraphResult
 
 class GraphMemory(ABC):
+    
     @abstractmethod
-    def add_entity(self, entity: str, attributes: dict):
-        pass
-
-    @abstractmethod
-    def add_relationship(self, entity1: str, entity2: str, relationship: str):
-        pass
-
-    @abstractmethod
-    def query(self, query: str) -> list:
+    def is_connected(self) -> bool:
+        """Check if the graph database is connected.
+        
+        Returns
+        -------
+        bool
+            True if connected, False otherwise.
+        """
         pass
     
+    @abstractmethod
+    def add_memory(self, memory: Memory) -> bool:
+        """Add a single memory to the graph database.
+        Parameters
+        ----------
+        memory : Memory
+            The memory object to add.
+            
+        Returns
+        -------
+        bool
+            True if the memory was added successfully, False otherwise.
+        """
+        pass
+
+    @abstractmethod
+    def add_memory_batch(self, memories: list[Memory]) -> list[str]:
+        """
+        Add a batch of memories to the graph database.
+        Parameters
+        ----------
+        memories : list[Memory]
+            The list of memory objects to add.
+
+        Returns
+        -------
+        list[str]
+            A list of IDs for the added memories.
+        """
+        pass
+
+    @abstractmethod
+    def add_memory_series(self, memories: list[Memory]) -> bool:
+        """
+        Add a series of memories to the graph database.
+        Memories in a series are linked together in order.
+        Parameters
+        ----------
+        memories : list[Memory]
+            The list of memory objects to add.
+            
+        Returns
+        -------
+        bool
+            True if the series was added successfully, False otherwise.
+        """
+        pass
+    
+    @abstractmethod
+    def query_memories_by_id(self, memory_ids: list[str]) -> list[Memory]:
+        """
+        Query memories by their IDs.
+        
+        Parameters
+        ----------
+        memory_ids : list[str]
+            The list of memory IDs to query.
+        
+        Returns
+        -------
+        list[Memory]
+            The list of memories matching the IDs.
+        """
+        pass
+    
+    @abstractmethod
+    def query_memories_by_entities(self, entities: list[str], limit: int = 10) -> list[GraphResult]:
+        """
+        Query memories by entities.
+        
+        Parameters
+        ----------
+        entities : list[str]
+            The list of entities to query.
+        limit : int
+            The maximum number of memories to return.
+        
+        Returns
+        -------
+        list[GraphResult]
+            The list of memories matching the query, along with their scores.
+        """
+        pass
+    
+    @abstractmethod
+    def query_memories_by_vector(self, vector: list[float], top_k: int = 10) -> list[GraphResult]:
+        """
+        Query memories by vector similarity.
+        
+        Parameters
+        ----------
+        vector : list[float]
+            The vector to query.
+        top_k : int
+            The number of top similar memories to return.
+        
+        Returns
+        -------
+        list[GraphResult]
+            The list of memories matching the query, along with their scores.
+        """
+        pass
+    
+    @abstractmethod
+    def connect_memories(self, memories: list[Memory]) -> bool:
+        """
+        Connect a list of memories in the graph database.
+        Basically strengthen relationships between them and create links if they don't exist.
+        Allows for future traversal between related memories.
+        
+        Parameters
+        ----------
+        memories : list[Memory]
+            The list of memory objects to connect.
+            
+        Returns
+        -------
+        bool
+            True if the memories were connected successfully, False otherwise.
+        """
+        pass
+    
+    @abstractmethod
+    def query_related_memories(self, memory_id: str, top_k: int = 10) -> list[GraphResult]:
+        """
+        Query memories related to a given memory.
+        
+        Parameters
+        ----------
+        memory_id : str
+            The ID of the memory to find related memories for.
+        top_k : int
+            The number of top related memories to return.
+        
+        Returns
+        -------
+        list[GraphResult]
+            The list of related memories along with their scores.
+        """
+        pass
+    
+    @abstractmethod
+    def update_memory_access(self, memory_ids: list[str], feedback: FeedbackType = FeedbackType.NEUTRAL) -> bool:
+        """
+        Update the access information for a list of memories.
+        Updates last accessed time and total access count.
+        Also updates positive or negative feedback counts based on the feedback type.
+
+        Parameters
+        ----------
+        memory_ids : list[str]
+            The list of memory IDs to update.
+        feedback : FeedbackType
+            The type of feedback. One of {POSITIVE, NEGATIVE, NEUTRAL}.
+
+        Returns
+        -------
+        bool
+            True if the update was successful, False otherwise.
+        """
+        pass
 
 class Neo4jPlaceholder(GraphMemory):
-    def add_entity(self, entity: str, attributes: dict):
-        # Placeholder implementation
-        pass
+    def is_connected(self) -> bool:
+        return True
+    
+    def add_memory(self, memory: Memory) -> bool:
+        return True
 
-    def add_relationship(self, entity1: str, entity2: str, relationship: str):
-        # Placeholder implementation
-        pass
+    def add_memory_batch(self, memories: list[Memory]) -> list[str]:
+        return [str(i) for i in range(len(memories))]
 
-    def query(self, query: str) -> list:
-        # Placeholder implementation
-        return []
+    def add_memory_series(self, memories: list[Memory]) -> bool:
+        return True
+
+    def query_memories_by_id(self, memory_ids: list[str]) -> list[Memory]:
+        return [Memory(id=mem_id) for mem_id in memory_ids]
     

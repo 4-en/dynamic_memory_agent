@@ -293,54 +293,6 @@ def add_memory(tx, memory: Memory) -> str:
     result = tx.run(query, data=mem_dict, entities_list=entities_list)
     db_mem = result.single()
     
-    
-    query = """
-    // 0. increase general storage total_entity_connections
-    MATCH (s:Storage {name: 'general_storage'})
-    SET s.total_entity_connections = s.total_entity_connections + size($entities_list)
-    
-    // 1. Find or create the single Memory node
-    MERGE (m:Memory {id: $mem_id})
-
-    WITH m
-    // 2. Unroll your list of entities
-    UNWIND $entities_list AS entity_data
-
-    // 3. Find or create the corresponding Entity node
-    MERGE (e:Entity {name: entity_data.name})
-
-    // 4. Find or create the relationship
-    MERGE (m)-[men:MENTIONS]->(e)
-        // 5. Run this ONLY IF the relationship was just CREATED
-        ON CREATE
-            SET e.mentionsCount = COALESCE(e.mentionsCount, 0) + 1
-
-    // 6. Run this EVERY TIME (on create or on match)
-    SET men.count = entity_data.count
-    """
-    # tx.run(query, mem_id=mem_id, entities_list=entities_list)
-    
-    # add a mentioned with relationship for each entity with other entities in the memory
-    query = """
-    // 1. Find the memory and all entities it mentions, collecting them into a list
-    MATCH (m:Memory {id: $mem_id})-[:MENTIONS]->(e:Entity)
-    WITH COLLECT(e) AS entities
-
-    // 2. Unwind the list twice to create all possible pairs
-    UNWIND entities AS e1
-    UNWIND entities AS e2
-
-    // 3. Filter the pairs *before* merging
-    WITH e1, e2
-    WHERE e1.name < e2.name  // avoid self-relationships and duplicate pairs
-
-    // 4. Merge the relationship and update the count
-    MERGE (e1)-[r:MENTIONED_WITH]->(e2)
-        ON CREATE SET r.coMentionCount = 1
-        ON MATCH SET r.coMentionCount = r.coMentionCount + 1
-    """
-    # tx.run(query, mem_id=mem_id)
-    
     return db_mem.get('mem_id', None) if db_mem else None
 
 def find_similar_memories(tx, embedding: list, top_k: int = 5):
@@ -415,10 +367,14 @@ def get_related_memories(tx, mem_id: str, top_k: int = 5) -> list[tuple[Memory, 
     query = """
     MATCH (m:Memory {id: $mem_id})-[r:RELATED_TO]-(related:Memory)
     OPTIONAL MATCH (related)-[men:MENTIONS]->(e:Entity)
+    OPTIONAL MATCH (related)-[:AUTHORED_BY]->(a:Author)
+    OPTIONAL MATCH (related)-[:SOURCED_FROM]->(s:Source)
     
     // sort by connection strength and return top k
     RETURN related AS node, r.connection_strength AS strength,
-        [(related)-[men:MENTIONS]->(e:Entity) | {name: e.name, count: men.count}] AS entities
+        [(related)-[men:MENTIONS]->(e:Entity) | {name: e.name, count: men.count}] AS entities,
+        [a.name AS author | a IN collect(a)] AS authors,
+        [s.name AS source | s IN collect(s)] AS sources
     ORDER BY r.connection_strength DESC
     LIMIT $top_k
     """
