@@ -295,6 +295,115 @@ def get_related_memories(tx, mem_id: str, top_k: int = 5) -> list[tuple[Memory, 
     
     return [(record_to_memory(record, entities=record['entities']), record['strength']) for record in result]
 
+
+def add_memory_series(tx, memories: list[Memory]):
+    # adds a series of memories and connects them in sequence
+    # for example, memories from a single text
+    # connects each memory to the next one in the series
+    mem_dicts = []
+    for memory in memories:
+        mem_dict = asdict(memory)
+        mem_dict['embedding'] = embed_text(memory.memory).tolist()  # convert np.ndarray to list for Neo4j storage
+        mem_dict['time_relevance'] = memory.time_relevance.value  # store enum as its value
+        mem_dicts.append(mem_dict)
+        mem_dict["entities"] = [ {'name': name, 'count': count} for name, count in memory.entities.items()]
+        
+    query = """
+    UNWIND $mem_dicts AS data
+    MERGE (m:Memory {id: data.id})
+    SET m.memory = data.memory,
+        m.topic = data.topic,
+        m.truthfulness = data.truthfulness,
+        m.embedding = data.embedding,
+        m.memory_time_point = data.memory_time_point,
+        m.source = data.source,
+        m.creation_time = data.creation_time,
+        m.last_access = data.last_access,
+        m.total_access_count = data.total_access_count,
+        m.time_relevance = data.time_relevance
+
+    // --- FIX PART 1: ---
+    // Collect 'm' and 'data' *before* the entity fan-out.
+    // This preserves the initial order from $mem_dicts.
+    WITH collect({m: m, data: data}) AS memDataPairs
+
+    // --- FIX PART 2: ---
+    // Extract the ordered list of memories *now* for the final step.
+    // We also keep the 'memDataPairs' list to process entities.
+    WITH [pair IN memDataPairs | pair.m] AS memories, memDataPairs
+
+    // --- FIX PART 3: ---
+    // Unwind the pairs to do the per-memory entity logic.
+    // We pass the 'memories' list along for each row.
+    UNWIND memDataPairs AS pair
+    WITH memories, pair.m AS m, pair.data AS data
+        
+    // add entities and relationships
+    // increase general storage total_entity_connections
+    MATCH (s:Storage {name: 'general_storage'})
+    SET s.total_entity_connections = s.total_entity_connections + size(data.entities)
+
+    WITH memories, m, data
+    UNWIND data.entities AS entity_data
+    MERGE (e:Entity {name: entity_data.name})
+    MERGE (m)-[men:MENTIONS]->(e)
+        ON CREATE SET e.mentionsCount = COALESCE(e.mentionsCount, 0) + 1
+        
+    SET men.count = entity_data.count
+
+    // --- FIX PART 4: ---
+    // The entity UNWIND created many rows, but 'memories' is the
+    // *same correct list* [m1, m2, ...] on every row.
+    // We use DISTINCT to collapse back to a single row
+    // carrying our correct, ordered 'memories' list.
+    WITH DISTINCT memories
+        
+    // connect memories in series based on initial order
+    // This logic now runs on the correct list (e.g., [m1, m2, m3])
+    // and will not create self-loops.
+    UNWIND range(0, size(memories) - 2) AS idx
+    WITH memories[idx] AS m1, memories[idx + 1] AS m2
+    MERGE (m1)-[r:NEXT_IN_SERIES]->(m2)
+    """
+    tx.run(query, mem_dicts=mem_dicts)
+    
+def add_memory_batch(tx, memories: list[Memory]):
+    # adds a batch of memories without connecting them
+    mem_dicts = []
+    for memory in memories:
+        mem_dict = asdict(memory)
+        mem_dict['embedding'] = embed_text(memory.memory).tolist()  # convert np.ndarray to list for Neo4j storage
+        mem_dict['time_relevance'] = memory.time_relevance.value  # store enum as its value
+        mem_dicts.append(mem_dict)
+        mem_dict["entities"] = [ {'name': name, 'count': count} for name, count in memory.entities.items()]
+        
+    query = """
+    UNWIND $mem_dicts AS data
+    MERGE (m:Memory {id: data.id})
+    SET m.memory = data.memory,
+        m.topic = data.topic,
+        m.truthfulness = data.truthfulness,
+        m.embedding = data.embedding,
+        m.memory_time_point = data.memory_time_point,
+        m.source = data.source,
+        m.creation_time = data.creation_time,
+        m.last_access = data.last_access,
+        m.total_access_count = data.total_access_count,
+        m.time_relevance = data.time_relevance
+    // add entities and relationships
+    // increase general storage total_entity_connections
+    WITH m, data
+    MATCH (s:Storage {name: 'general_storage'})
+    SET s.total_entity_connections = s.total_entity_connections + size(data.entities)
+    WITH m, data
+    UNWIND data.entities AS entity_data
+    MERGE (e:Entity {name: entity_data.name})
+    MERGE (m)-[men:MENTIONS]->(e)
+        ON CREATE SET e.mentionsCount = COALESCE(e.mentionsCount, 0) + 1
+    SET men.count = entity_data.count
+    """
+    tx.run(query, mem_dicts=mem_dicts)
+
 def get_memories_by_timepoint(tx, time_point: float, window: float = 86400 * 7, top_k: int = 5):
     # get memories within time window around time_point
     # sort by closeness to time_point
@@ -374,10 +483,12 @@ with driver.session() as session:
     initialize_db(session)
     
     
-    for memory in memories:
-        result = session.execute_write(add_memory, memory)
-        print("Added memory with id:", result['m']['id'])
-        
+    #for memory in memories:
+        #result = session.execute_write(add_memory, memory)
+        #print("Added memory with id:", result['m']['id'])
+
+    session.execute_write(add_memory_batch, memories)
+
     # try to find using entities
     q_entities = ["james-webb-space-telescope", "jwst", "senko-san"]
     found_memories = session.execute_read(find_memories_by_entities, q_entities, top_k=3)
