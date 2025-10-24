@@ -121,6 +121,9 @@ for i, text in enumerate(sample_texts):
         # add a source for first memory
         memory.source = Source.from_web("https://example.com/jwst", authors=["Jane Doe", "John Smith"], publisher="Example Publisher")
     
+    elif i == 2:
+        memory.entities = {}
+    
     print(f"Created memory with id: {memory.id} and embedding shape: {memory.embedding.shape}")
     memories.append(memory)
     
@@ -198,7 +201,21 @@ def record_to_memory(record) -> Memory:
     memory = Memory(**mem_dict, entities=entities_dict)
     return memory
 
-def add_memory(tx, memory: Memory):
+def add_memory(tx, memory: Memory) -> str:
+    """Add a memory to the database.
+    
+    Parameters
+    ----------
+    tx : neo4j.Transaction
+        The Neo4j transaction object.
+    memory : Memory
+        The memory object to add to the database.
+
+    Returns
+    -------
+    str
+        The ID of the added/updated memory, or None if failed.
+    """
     mem_id = memory.id
     mem_dict = asdict(memory)
     mem_dict['embedding'] = embed_text(memory.memory).tolist()  # convert np.ndarray to list for Neo4j storage
@@ -208,6 +225,8 @@ def add_memory(tx, memory: Memory):
     mem_dict['authors'] = memory.source.authors if memory.source else []
     mem_dict['publisher'] = memory.source.publisher if memory.source else None
     mem_dict['source_type'] = memory.source.source_type.value if memory.source else None
+    
+    entities_list = [ {'name': name, 'count': count} for name, count in memory.entities.items()]
     
     query = """
     // Create or find the main node
@@ -252,19 +271,44 @@ def add_memory(tx, memory: Memory):
         MERGE (m)-[:SOURCED_FROM]->(s)
     }
     
-    // 'm' was never filtered, so it will always be returned
-    RETURN m
+    // increase general storage total_entity_connections
+    WITH m
+    MATCH (s:Storage {name: 'general_storage'})
+    SET s.total_entity_connections = s.total_entity_connections + size($entities_list)
+    
+    // create entities and relationships
+    WITH m
+    CALL (m) {
+        WITH m
+        UNWIND $entities_list AS entity_data
+        MERGE (e:Entity {name: entity_data.name})
+        MERGE (m)-[men:MENTIONS]->(e)
+            ON CREATE SET e.mentionsCount = COALESCE(e.mentionsCount, 0) + 1
+        SET men.count = entity_data.count
+
+    
+        // add relationships between entities mentioned in this memory
+        WITH m, collect(e) AS entities
+        UNWIND entities AS e1
+        UNWIND entities AS e2
+        WITH e1, e2, m
+        WHERE e1.name < e2.name
+        // if this query is used as an update, this will incorrectly double count co-mentions
+        // therefore, use different method for updates or recalculate after batch updates
+        MERGE (e1)-[r:MENTIONED_WITH]->(e2)
+            ON CREATE SET r.coMentionCount = 1
+            ON MATCH SET r.coMentionCount = r.coMentionCount + 1
+    }
+        
+    RETURN m.id AS mem_id
     """
     
     # TODO: also create Entity nodes and relationships
     # also nodes and relationships for source if applicable
     
-    result = tx.run(query, data=mem_dict)
+    result = tx.run(query, data=mem_dict, entities_list=entities_list)
     db_mem = result.single()
     
-    print("Added/Updated memory with id:", db_mem['m']['id'])
-    
-    entities_list = [ {'name': name, 'count': count} for name, count in memory.entities.items()]
     
     query = """
     // 0. increase general storage total_entity_connections
@@ -290,7 +334,7 @@ def add_memory(tx, memory: Memory):
     // 6. Run this EVERY TIME (on create or on match)
     SET men.count = entity_data.count
     """
-    tx.run(query, mem_id=mem_id, entities_list=entities_list)
+    # tx.run(query, mem_id=mem_id, entities_list=entities_list)
     
     # add a mentioned with relationship for each entity with other entities in the memory
     query = """
@@ -311,9 +355,9 @@ def add_memory(tx, memory: Memory):
         ON CREATE SET r.coMentionCount = 1
         ON MATCH SET r.coMentionCount = r.coMentionCount + 1
     """
-    tx.run(query, mem_id=mem_id)
+    # tx.run(query, mem_id=mem_id)
     
-    return db_mem
+    return db_mem.get('mem_id', None) if db_mem else None
 
 def find_similar_memories(tx, embedding: list, top_k: int = 5):
     index_name = "memory_embedding_index"
@@ -595,7 +639,7 @@ with driver.session() as session:
     
     for memory in memories:
         result = session.execute_write(add_memory, memory)
-        print("Added memory with id:", result['m']['id'])
+        print("Added memory with id:", result)
 
     # session.execute_write(add_memory_batch, memories)
 

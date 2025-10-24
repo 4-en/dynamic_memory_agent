@@ -196,7 +196,7 @@ class Memory:
     This can include personal information about a person or general knowledge.
     """
     memory: str # The memory to store
-    entities: dict = field(default_factory=dict) # entities mentioned in the memory, with occurrence counts
+    entities: dict = None # entities mentioned in the memory, with occurrence counts
     topic: str = None # The topic of the memory
     time_relevance: TimeRelevance = TimeRelevance.ALWAYS
     truthfulness: float = 1.0 # The estimated truthfulness of the memory, 1.0 is probably completely true, 0.0 is probably completely false
@@ -225,7 +225,7 @@ class Memory:
 
         if isinstance(self.entities, list):
             self.entities = {entity: 1 for entity in self.entities}
-        elif self.entities is None or self.entities == {}:
+        elif self.entities is None:
             self.set_memory(self.memory)
             return
         elif isinstance(self.entities, dict):
