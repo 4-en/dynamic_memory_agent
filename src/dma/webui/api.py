@@ -11,7 +11,7 @@ from dma.core import Conversation, Message, Role
 
 # --- Pydantic Models ---
 # Model for a single message in the chat history
-class Message(BaseModel):
+class ChatMessage(BaseModel):
     role: str
     content: str
 
@@ -43,7 +43,7 @@ class DMAWebUI:
 
         # --- Connect API Endpoints ---
 
-        self.app.get("/api/history", response_model=list[Message])(self.get_history)
+        self.app.get("/api/history", response_model=list[ChatMessage])(self.get_history)
         self.app.post("/api/chat")(self.chat)
         self.app.get("/", response_class=FileResponse)(self.get_index)
 
