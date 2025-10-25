@@ -2,7 +2,7 @@ from dma.core import RetrievalStep, EntityQuery, EmbeddingQuery, RetrievalQuery,
 from dma.core import Conversation, Message
 from dma.core import Memory, MemoryResult
 
-from .graph import GraphMemory, Neo4jMemory
+from .graph import Neo4jMemory, GraphMemory
 
 from dma.config.dma_config import get_config
 
@@ -17,21 +17,43 @@ class Retriever:
     def __init__(self):
         self.config = get_config()
         
-        # TODO: initialize actual memory backend
-        self.graph_memory = Neo4jMemory()
+        self.graph_memory: GraphMemory = Neo4jMemory()
         
         
-    def add_memory(self, memory: Memory):
-        raise NotImplementedError("Method not implemented yet.")
-    
-    def add_memories(self, memories: list[Memory]):
-        # might be useful to add in batch for efficiency
-        raise NotImplementedError("Method not implemented yet.")
-    
-    def add_memory_series(self, memories: list[Memory]):
+    def add_memory(self, memory: Memory) -> bool:
+        """Add a single memory to the memory backend.
+        
+        Parameters
+        ----------
+        memory : Memory
+            The memory object to add.
+            
+        Returns
+        -------
+        bool
+            True if the memory was added successfully, False otherwise.
+        """
+        return self.graph_memory.add_memory(memory)
+
+    def add_memory_batch(self, memories: list[Memory]) -> list[str]:
+        """Add a batch of memories to the memory backend.
+        
+        Parameters
+        ----------
+        memories : list[Memory]
+            The list of memory objects to add.
+
+        Returns
+        -------
+        list[str]
+            A list of IDs for the added memories.
+        """
+        return self.graph_memory.add_memory_batch(memories)
+
+    def add_memory_series(self, memories: list[Memory]) -> bool:
         """Add a series of memories to the memory backend.
         Memories in a series are linked together in order.
-        
+
         Parameters
         ----------
         memories : list[Memory]
@@ -42,7 +64,7 @@ class Retriever:
         bool
             True if the memories were added successfully, False otherwise.
         """
-        raise NotImplementedError("Method not implemented yet.")
+        return self.graph_memory.add_memory_series(memories)
     
     def retrieve(self, query: RetrievalStep, top_k: int = 5) -> list[MemoryResult]:
         """Retrieve relevant memories based on the provided query.
