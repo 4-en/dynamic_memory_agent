@@ -505,19 +505,18 @@ def add_memory_series(tx, memories: list[Memory]):
         REMOVE men.isNew
     }
     
-    WITH DISTINCT m
-    // connect memories in series
-    CALL(m) {
-        WITH collect(m) AS mems
+    WITH collect(DISTINCT m) AS mems
+    CALL(mems) {
+        WITH mems
         UNWIND range(0, size(mems) - 2) AS idx
-        WITH mems[idx] AS m1, mems[idx + 1] AS m2, mems
+        WITH mems[idx] AS m1, mems[idx + 1] AS m2
         MERGE (m1)-[r:NEXT_IN_SERIES]->(m2)
     }
-    RETURN m.id AS mem_id   
+    RETURN [m IN mems | m.id] AS connected_mem_ids
     """
     result = tx.run(query, mem_dicts=mem_dicts)
     
-    ids = [record.get('mem_id', None) for record in result]
+    ids = result.single().get('connected_mem_ids', [])
     ids = [id for id in ids if id is not None]
     if len(ids) != len(memories):
         print(f"Warning: only {len(ids)} out of {len(memories)} memories were added successfully.")
@@ -729,7 +728,7 @@ with driver.session() as session:
     #    result = session.execute_write(add_memory, memory)
     #    print("Added memory with id:", result)
 
-    session.execute_write(add_memory_batch, memories)
+    session.execute_write(add_memory_series, memories)
 
     # try to find using entities
     q_entities = ["james-webb-space-telescope", "jwst", "senko-san"]

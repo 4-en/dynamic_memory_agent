@@ -47,12 +47,98 @@ class Neo4jMemory(GraphMemory):
         else:
             raise ConnectionError("Could not connect to Neo4j database.")
         
+        self._init_db()
+        
+    def reset_database(self, CONFIRM_DELETE = False):
+        """Reset the graph database by deleting all nodes and relationships.
+        
+        Parameters
+        ----------
+        CONFIRM_DELETE : bool
+            Must be set to True to confirm deletion.
+        
+        Returns
+        -------
+        bool
+            True if the database was reset successfully, False otherwise.
+        """
+        if not CONFIRM_DELETE:
+            logging.warning("Database reset not confirmed. Set CONFIRM_DELETE=True to proceed.")
+            return False
+        
+        try:
+            with self.driver.session(database=self.database) as session:
+                session.run("MATCH (n) DETACH DELETE n")
+            logging.info("Database reset successfully.")
+            self._init_db()
+            return True
+        except Exception as e:
+            logging.error(f"Error resetting database: {e}")
+            return False
+        
     def _create_db_if_not_exists(self):
         # note: this requires the user to have admin privileges
         # and Neo4j enterprise edition
         # the community edition uses 'neo4j' as the default and only database
-        with self.driver.session() as session:
-            session.run(f"CREATE DATABASE {self.database} IF NOT EXISTS")
+        pass
+        #with self.driver.session() as session:
+        #    session.run(f"CREATE DATABASE {self.database} IF NOT EXISTS")
+            
+    def _init_db(self):
+        # create necessary indexes and constraints
+        def create_constraints(tx):
+            tx.run("""
+            // Ensure uniqueness constraint on Memory id
+            CREATE CONSTRAINT memory_id_unique IF NOT EXISTS
+            FOR (m:Memory)
+            REQUIRE m.id IS UNIQUE;
+            """)
+            
+            tx.run("""
+            // Ensure uniqueness constraint on Entity name
+            CREATE CONSTRAINT entity_name_unique IF NOT EXISTS
+            FOR (e:Entity)
+            REQUIRE e.name IS UNIQUE;
+            """)
+            
+            tx.run("""
+            // Create vector index on Memory embedding
+            CREATE VECTOR INDEX memory_embedding_index IF NOT EXISTS
+            FOR (m:Memory)
+            ON (m.embedding)
+            OPTIONS { indexConfig: {
+                `vector.dimensions`: 384,
+                `vector.similarity_function`: 'cosine'
+            }};
+            """)
+            
+            tx.run("""
+            // index last_access for faster sorting
+            CREATE INDEX memory_last_access_index IF NOT EXISTS
+            FOR (m:Memory)
+            ON (m.last_access);
+            """)
+            
+            tx.run("""
+            // index memory time point for faster time-based queries
+            CREATE INDEX memory_time_point_index IF NOT EXISTS
+            FOR (m:Memory)
+            ON (m.memory_time_point);
+            """)
+        
+        def setup_storage_node(tx):
+            tx.run("""
+            // Setup general storage node
+            MERGE (s:Storage {name: 'general_storage'})
+            SET s.total_entity_connections = coalesce(s.total_entity_connections, 0)
+            SET s.last_accessed = timestamp()
+            SET s.first_created = coalesce(s.first_created, timestamp())
+            SET s.purpose = coalesce(s.purpose, "General Knowledge")
+            """)
+            
+        with self.driver.session(database=self.database) as session:
+            session.execute_write(create_constraints)
+            session.execute_write(setup_storage_node)
 
     def is_connected(self) -> bool:
         """Check if the graph database is connected.
@@ -69,7 +155,7 @@ class Neo4jMemory(GraphMemory):
         except Exception:
             return False
         
-    def _record_to_memory(record) -> Memory:
+    def _record_to_memory(self, record) -> Memory:
 
         node = record['node']
 
@@ -205,7 +291,6 @@ class Neo4jMemory(GraphMemory):
                 ON CREATE SET r.coMentionCount = 1
                 ON MATCH SET r.coMentionCount = r.coMentionCount + 1
         }
-            
         RETURN m.id AS mem_id
         """
         
@@ -217,8 +302,8 @@ class Neo4jMemory(GraphMemory):
     def add_memory(self, memory: Memory) -> bool:
         try:
             with self.driver.session(database=self.database) as session:
-                mem_id = session.write_transaction(self._add_memory, memory)
-                return mem_id is not None
+                mem_id = session.execute_write(self._add_memory, memory)
+                return mem_id == memory.id if mem_id is not None else mem_id is not None
         except Exception as e:
             logging.error(f"Error adding memory: {e}")
             return False
@@ -287,9 +372,9 @@ class Neo4jMemory(GraphMemory):
             UNWIND entities AS entity_data
 
             MERGE (e:Entity {name: entity_data.name})
-                ON CREATE SET e.mentionsCount = COALESCE(e.mentionsCount, 0) + 1
             MERGE (m)-[men:MENTIONS]->(e)
                 ON CREATE SET men.isNew = true
+                ON CREATE SET e.mentionsCount = COALESCE(e.mentionsCount, 0) + 1
             SET men.count = entity_data.count
             
             // Collect all entities for this memory
@@ -342,7 +427,7 @@ class Neo4jMemory(GraphMemory):
     def add_memory_batch(self, memories: list[Memory]) -> list[str]:
         try:
             with self.driver.session(database=self.database) as session:
-                mem_ids = session.write_transaction(self._add_memory_batch, memories)
+                mem_ids = session.execute_write(self._add_memory_batch, memories)
                 return mem_ids
         except Exception as e:
             logging.error(f"Error adding memory batch: {e}")
@@ -415,9 +500,9 @@ class Neo4jMemory(GraphMemory):
             UNWIND entities AS entity_data
 
             MERGE (e:Entity {name: entity_data.name})
-                ON CREATE SET e.mentionsCount = COALESCE(e.mentionsCount, 0) + 1
             MERGE (m)-[men:MENTIONS]->(e)
                 ON CREATE SET men.isNew = true
+                ON CREATE SET e.mentionsCount = COALESCE(e.mentionsCount, 0) + 1
             SET men.count = entity_data.count
             
             // Collect all entities for this memory
@@ -455,28 +540,28 @@ class Neo4jMemory(GraphMemory):
             REMOVE men.isNew
         }
         
-        WITH DISTINCT m
-        // connect memories in series
-        CALL(m) {
-            WITH collect(m) AS mems
+        WITH collect(DISTINCT m) AS mems
+        CALL(mems) {
+            WITH mems
             UNWIND range(0, size(mems) - 2) AS idx
-            WITH mems[idx] AS m1, mems[idx + 1] AS m2, mems
+            WITH mems[idx] AS m1, mems[idx + 1] AS m2
             MERGE (m1)-[r:NEXT_IN_SERIES]->(m2)
         }
-        RETURN m.id AS mem_id
+        RETURN [m IN mems | m.id] AS connected_mem_ids
         """
         result = tx.run(query, mem_dicts=mem_dicts)
         
-        ids = [record.get('mem_id', None) for record in result]
+        ids = result.single().get('connected_mem_ids', [])
         ids = [id for id in ids if id is not None]
         if len(ids) != len(memories):
-            raise ValueError(f"Only {len(ids)} out of {len(memories)} memories were added successfully. Aborting series addition.")
+            print(f"Warning: only {len(ids)} out of {len(memories)} memories were added successfully.")
         return ids
     
     def add_memory_series(self, memories: list[Memory]) -> bool:
 
         try:
-            added_ids = self._add_memory_series(memories)
+            with self.driver.session(database=self.database) as session:
+                added_ids = session.execute_write(self._add_memory_series, memories)
             return len(added_ids) == len(memories)
         except Exception as e:
             logging.error(f"Error adding memory series: {e}")
@@ -505,7 +590,7 @@ class Neo4jMemory(GraphMemory):
     def query_memories_by_id(self, memory_ids: list[str]) -> list[Memory]:
         try:
             with self.driver.session(database=self.database) as session:
-                memories = session.read_transaction(self._query_memories_by_id, memory_ids)
+                memories = session.execute_read(self._query_memories_by_id, memory_ids)
                 return memories
         except Exception as e:
             logging.error(f"Error querying memories by id: {e}")
@@ -566,7 +651,7 @@ class Neo4jMemory(GraphMemory):
     def query_memories_by_entities(self, entities: list[str], limit: int = 10) -> dict[list[GraphResult]]:
         try:
             with self.driver.session(database=self.database) as session:
-                mem_dict = session.read_transaction(self._query_memories_by_entities, entities, limit)
+                mem_dict = session.execute_read(self._query_memories_by_entities, entities, limit)
                 
                 result_dict = {}
                 for entity, mem_list in mem_dict.items():
@@ -600,7 +685,7 @@ class Neo4jMemory(GraphMemory):
     def query_memories_by_vector(self, vector: list[float], top_k: int = 10) -> list[GraphResult]:
         try:
             with self.driver.session(database=self.database) as session:
-                mem_list = session.read_transaction(self._query_memories_by_vector, vector, top_k)
+                mem_list = session.execute_read(self._query_memories_by_vector, vector, top_k)
                 return [GraphResult(memory=mem, score=score) for mem, score in mem_list]
         except Exception as e:
             logging.error(f"Error querying memories by vector: {e}")
@@ -627,7 +712,7 @@ class Neo4jMemory(GraphMemory):
     def connect_memories(self, memory_ids: list[str]) -> bool:
         try:
             with self.driver.session(database=self.database) as session:
-                result = session.write_transaction(self._connect_memories, memory_ids)
+                result = session.execute_write(self._connect_memories, memory_ids)
                 return result
         except Exception as e:
             logging.error(f"Error connecting memories: {e}")
@@ -653,7 +738,7 @@ class Neo4jMemory(GraphMemory):
     def query_related_memories(self, memory_id: str, top_k: int = 10) -> list[GraphResult]:
         try:
             with self.driver.session(database=self.database) as session:
-                mem_list = session.read_transaction(self._query_related_memories, memory_id, top_k)
+                mem_list = session.execute_read(self._query_related_memories, memory_id, top_k)
                 return [GraphResult(memory=mem, score=strength) for mem, strength in mem_list]
         except Exception as e:
             logging.error(f"Error querying related memories: {e}")
@@ -677,6 +762,6 @@ class Neo4jMemory(GraphMemory):
     def update_memory_access(self, memories: list[str], feedback: FeedbackType=FeedbackType.NEUTRAL):
         try:
             with self.driver.session(database=self.database) as session:
-                session.write_transaction(self._update_memory_access, memories, feedback)
+                session.execute_write(self._update_memory_access, memories, feedback)
         except Exception as e:
             logging.error(f"Error updating memory access: {e}")

@@ -17,6 +17,17 @@ class GraphMemory(ABC):
         pass
     
     @abstractmethod
+    def reset_database(self, CONFIRM_DELETE: bool = False) -> bool:
+        """Reset the graph database by deleting all nodes and relationships.
+        
+        Returns
+        -------
+        bool
+            True if the database was reset successfully, False otherwise.
+        """
+        pass
+    
+    @abstractmethod
     def add_memory(self, memory: Memory) -> bool:
         """Add a single memory to the graph database.
         Parameters
