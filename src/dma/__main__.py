@@ -4,6 +4,7 @@
 
 from dma.pipeline import Pipeline
 from dma.core import Conversation, Message, Role
+from dma.webui import launch_webui
 import logging
 
 
@@ -50,4 +51,5 @@ def main():
             print("Agent: No response generated.")
 
 if __name__ == "__main__":
-    main()
+    launch_webui()
+    # main()
