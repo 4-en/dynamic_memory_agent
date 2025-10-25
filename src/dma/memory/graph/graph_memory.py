@@ -81,8 +81,25 @@ class GraphMemory(ABC):
         """
         pass
     
+    def query_memory_by_id(self, memory_id: str) -> Memory | None:
+        """
+        Query a single memory by its ID.
+        
+        Parameters
+        ----------
+        memory_id : str
+            The ID of the memory to query.
+        
+        Returns
+        -------
+        Memory | None
+            The memory matching the ID, or None if not found.
+        """
+        results = self.query_memories_by_id([memory_id])
+        return results[0] if results else None
+    
     @abstractmethod
-    def query_memories_by_entities(self, entities: list[str], limit: int = 10) -> list[GraphResult]:
+    def query_memories_by_entities(self, entities: list[str], limit: int = 10) -> dict[list[GraphResult]]:
         """
         Query memories by entities.
         
@@ -91,12 +108,12 @@ class GraphMemory(ABC):
         entities : list[str]
             The list of entities to query.
         limit : int
-            The maximum number of memories to return.
+            The maximum number of memories per entity to return.
         
         Returns
         -------
-        list[GraphResult]
-            The list of memories matching the query, along with their scores.
+        dict[list[GraphResult]]
+            A dictionary mapping each entity to a list of memories matching the query, along with their scores.
         """
         pass
     
@@ -120,7 +137,7 @@ class GraphMemory(ABC):
         pass
     
     @abstractmethod
-    def connect_memories(self, memories: list[Memory]) -> bool:
+    def connect_memories(self, memory_ids: list[str]) -> bool:
         """
         Connect a list of memories in the graph database.
         Basically strengthen relationships between them and create links if they don't exist.
@@ -128,9 +145,9 @@ class GraphMemory(ABC):
         
         Parameters
         ----------
-        memories : list[Memory]
-            The list of memory objects to connect.
-            
+        memories : list[str]
+            The list of memory IDs to connect.
+
         Returns
         -------
         bool

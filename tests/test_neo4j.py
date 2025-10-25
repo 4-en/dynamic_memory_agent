@@ -316,19 +316,38 @@ def find_similar_memories(tx, embedding: list, top_k: int = 5):
 def find_memory_by_id(tx, mem_id: str) -> Memory | None:
     query = """
     MATCH (m:Memory {id: $mem_id})
-    OPTIONAL MATCH (m)-[men:MENTIONS]->(e:Entity)
-    OPTIONAL MATCH (m)-[:AUTHORED_BY]->(a:Author)
     OPTIONAL MATCH (m)-[:SOURCED_FROM]->(s:Source)
 
-    RETURN m AS node, [(m)-[men:MENTIONS]->(e:Entity) | {name: e.name, count: men.count}] AS entities, 
-           [(m)-[:AUTHORED_BY]->(a:Author) | a.name] AS authors, 
-           s.name AS source
+    RETURN m AS node, 
+        [(m)-[men:MENTIONS]->(e:Entity) | {name: e.name, count: men.count}] AS entities, 
+        [(m)-[:AUTHORED_BY]->(a:Author) | a.name] AS authors,           
+        s.name AS source
     """
     result = tx.run(query, mem_id=mem_id)
     record = result.single()
     if record is None:
         return None
     return record_to_memory(record)
+
+def query_memories_by_id(tx, memory_ids: list[str]) -> list[Memory]:
+    query = """
+    UNWIND $memory_ids AS mem_id
+    MATCH (m:Memory {id: mem_id})
+
+    OPTIONAL MATCH (m)-[:SOURCED_FROM]->(s:Source) 
+
+    RETURN m AS node, 
+        // Collect all MENTIONS relationships as a list (Prevents duplication)
+        [(m)-[men:MENTIONS]->(e:Entity) | {name: e.name, count: men.count}] AS entities, 
+        // Collect all AUTHORED_BY relationships as a list (Prevents duplication)
+        [(m)-[:AUTHORED_BY]->(a:Author) | a.name] AS authors, 
+        // Source is a single value, pulled from the safe OPTIONAL MATCH
+        s.name AS source
+    """
+    result = tx.run(query, memory_ids=memory_ids)
+    if result is None:
+        return []
+    return [record_to_memory(record) for record in result]
 
 def update_memory_access(tx, memories: list[str], feedback: FeedbackType=FeedbackType.NEUTRAL):
     query = """
@@ -364,14 +383,12 @@ def connect_memories(tx, memory_ids: list[str]):
 def get_related_memories(tx, mem_id: str, top_k: int = 5) -> list[tuple[Memory, float]]:
     query = """
     MATCH (m:Memory {id: $mem_id})-[r:RELATED_TO]-(related:Memory)
-    OPTIONAL MATCH (related)-[men:MENTIONS]->(e:Entity)
-    OPTIONAL MATCH (related)-[:AUTHORED_BY]->(a:Author)
     OPTIONAL MATCH (related)-[:SOURCED_FROM]->(s:Source)
     
     // sort by connection strength and return top k
     RETURN related AS node, r.connection_strength AS strength,
         [(related)-[men:MENTIONS]->(e:Entity) | {name: e.name, count: men.count}] AS entities,
-        [a.name AS author | a IN collect(a)] AS authors,
+        [(related)-[:AUTHORED_BY]->(a:Author) | a.name] AS authors,
         [s.name AS source | s IN collect(s)] AS sources
     ORDER BY r.connection_strength DESC
     LIMIT $top_k
@@ -490,13 +507,12 @@ def add_memory_series(tx, memories: list[Memory]):
     
     WITH DISTINCT m
     // connect memories in series
-    WITH collect(m) AS mems
-    UNWIND range(0, size(mems) - 2) AS idx
-    WITH mems[idx] AS m1, mems[idx + 1] AS m2, mems
-    MERGE (m1)-[r:NEXT_IN_SERIES]->(m2)
-    
-    WITH mems
-    UNWIND mems AS m
+    CALL(m) {
+        WITH collect(m) AS mems
+        UNWIND range(0, size(mems) - 2) AS idx
+        WITH mems[idx] AS m1, mems[idx + 1] AS m2, mems
+        MERGE (m1)-[r:NEXT_IN_SERIES]->(m2)
+    }
     RETURN m.id AS mem_id   
     """
     result = tx.run(query, mem_dicts=mem_dicts)
@@ -713,7 +729,7 @@ with driver.session() as session:
     #    result = session.execute_write(add_memory, memory)
     #    print("Added memory with id:", result)
 
-    session.execute_write(add_memory_series, memories)
+    session.execute_write(add_memory_batch, memories)
 
     # try to find using entities
     q_entities = ["james-webb-space-telescope", "jwst", "senko-san"]
@@ -727,7 +743,10 @@ with driver.session() as session:
             feedback = random.choice([FeedbackType.POSITIVE, FeedbackType.NEGATIVE, FeedbackType.NEUTRAL])
             session.execute_write(update_memory_access, [mem.id], feedback=feedback)
             
-            
+    # test finding by ids
+    memory_ids = [memory.id for memory in memories]
+    queried_memories = session.execute_read(query_memories_by_id, memory_ids)
+    print(f"Queried {len(queried_memories)} memories by {len(memory_ids)} ids.")
         
 
     query_memory = memories[0]
