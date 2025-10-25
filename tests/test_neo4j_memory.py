@@ -3,9 +3,24 @@ from dma.core import Memory, TimeRelevance, Source
 import time
 import random
 
+def assert_verbose(**kwargs):
+    # Simple helper function to assert with verbose output
+    # compares passed keyword arguments for equality
+    if len(kwargs) < 1:
+        raise ValueError("At least one keyword argument is required for comparison.")
+    elif len(kwargs) == 1:
+        # assume we want to assert it's not None
+        key, value = next(iter(kwargs.items()))
+        assert value is not None, f"Assertion failed: {key} is None"
+        return
+    items = list(kwargs.items())
+    first_key, first_value = items[0]
+    for key, value in items[1:]:
+        assert first_value == value, f"Assertion failed: {first_key} != {key} ({first_value} != {value})"
+
 db = Neo4jMemory()
 
-assert db.is_connected()
+assert_verbose(connected=db.is_connected())
 
 db.reset_database(CONFIRM_DELETE=True)
 
@@ -33,29 +48,26 @@ for i, text in enumerate(sample_texts):
     elif i == 2:
         memory.entities = {}
     
-    print(f"Created memory with id: {memory.id} and embedding shape: {memory.embedding.shape}")
     memories.append(memory)
     
 # set single add memory
 res = db.add_memory(memories[0])
-assert res is True
-print("Added single memory.")
+assert_verbose(added_single_memory=res)
 
 # set add memory batch
 res_ids = db.add_memory_batch(memories[1:])
-assert len(res_ids) == len(memories) - 1
-print("Added memory batch.")
+assert_verbose(batch_size=len(memories)-1, returned_ids=len(res_ids))
 
 # test query by ids
 query_ids = [memories[0].id, memories[2].id]
 queried_memories = db.query_memories_by_id(query_ids)
-assert len(queried_memories) == 2
+assert_verbose(queried_size=len(queried_memories), expected_size=len(query_ids))
 for qm in queried_memories:
     original_mem = next((m for m in memories if m.id == qm.id), None)
-    assert original_mem is not None
-    assert qm.memory == original_mem.memory
-print("Queried memories by IDs successfully.")
+    assert_verbose(found_original=original_mem)
+    assert_verbose(queried_memory=qm.memory, original_memory=original_mem.memory)
 
+# test add memory series
 memory_sequence = []
 random.seed(42)  # For reproducibility
 entities_pool = ["senko-san", "ahri", "yuzu", "fubuki"]
@@ -70,7 +82,7 @@ for i in range(6):
     memory_sequence.append(mem)
     
 res = db.add_memory_series(memory_sequence)
-assert res is True
-print("Added memory series successfully.")
+assert_verbose(added_memory_series=res)
 
 
+print("All tests passed successfully.")
