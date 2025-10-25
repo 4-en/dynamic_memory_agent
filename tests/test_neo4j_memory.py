@@ -1,5 +1,5 @@
 from dma.memory.graph import Neo4jMemory
-from dma.core import Memory, TimeRelevance, Source
+from dma.core import Memory, TimeRelevance, Source, FeedbackType
 import time
 import random
 
@@ -84,5 +84,39 @@ for i in range(6):
 res = db.add_memory_series(memory_sequence)
 assert_verbose(added_memory_series=res)
 
+# test query by entities
+query_entities = ["senko-san", "yuzu"]
+entity_query_results = db.query_memories_by_entities(query_entities, limit=3)
+for entity in query_entities:
+    results = entity_query_results.get(entity, [])
+    for gr in results:
+        assert_verbose(entity_in_memory=entity in gr.memory.entities)
+        
+# test query by vector
+test_vector = memories[0].embedding
+vector_query_results = db.query_memories_by_vector(test_vector, top_k=3)
+assert_verbose(vector_query_size=len(vector_query_results), expected_size=3)
+# first result should be the memory itself
+assert_verbose(top_vector_match_id=vector_query_results[0].memory.id, expected_id=memories[0].id)
+
+# test connecting memories to each other
+res = db.connect_memories([memory_sequence[0].id, memory_sequence[1].id])
+assert_verbose(connected_memory_ids=res)
+
+# test getting related memories
+related_memories = db.query_related_memories(memory_sequence[0].id, top_k=2)
+assert_verbose(related_size=len(related_memories), expected_size=1)  # only one related memory in this case
+assert_verbose(related_memory_id=related_memories[0].memory.id, expected_id=memory_sequence[1].id)
+
+# test updating memory access
+res = db.update_memory_access([memory_sequence[0].id], FeedbackType.POSITIVE)
+assert_verbose(updated_memory_ids=res, expected_ids=[memory_sequence[0].id])
+updated_memory = db.query_memory_by_id(memory_sequence[0].id)
+timestamp_increased = updated_memory.last_access > memory_sequence[0].last_access
+assert_verbose(timestamp_increased=timestamp_increased)
+access_count_increased = updated_memory.total_access_count == (memory_sequence[0].total_access_count + 1)
+assert_verbose(access_count_increased=access_count_increased)
+positive_feedback_increased = updated_memory.positive_access_count == (memory_sequence[0].positive_access_count + 1)
+assert_verbose(positive_feedback_increased=positive_feedback_increased)
 
 print("All tests passed successfully.")

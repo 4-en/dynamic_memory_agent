@@ -186,7 +186,7 @@ class GraphMemory(ABC):
         pass
     
     @abstractmethod
-    def update_memory_access(self, memory_ids: list[str], feedback: FeedbackType = FeedbackType.NEUTRAL) -> bool:
+    def update_memory_access(self, memory_ids: list[str], feedback: FeedbackType = FeedbackType.NEUTRAL) -> list[str]:
         """
         Update the access information for a list of memories.
         Updates last accessed time and total access count.
@@ -201,8 +201,8 @@ class GraphMemory(ABC):
 
         Returns
         -------
-        bool
-            True if the update was successful, False otherwise.
+        list[str]
+            The list of memory IDs that were successfully updated.
         """
         pass
 

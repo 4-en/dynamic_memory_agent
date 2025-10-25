@@ -727,7 +727,7 @@ class Neo4jMemory(GraphMemory):
         RETURN related AS node, r.connection_strength AS strength,
             [(related)-[men:MENTIONS]->(e:Entity) | {name: e.name, count: men.count}] AS entities,
             [(related)-[:AUTHORED_BY]->(a:Author) | a.name] AS authors,
-            [s.name AS source | s IN collect(s)] AS sources
+            s.name AS source
         ORDER BY r.connection_strength DESC
         LIMIT $top_k
         """
@@ -744,12 +744,14 @@ class Neo4jMemory(GraphMemory):
             logging.error(f"Error querying related memories: {e}")
             return []
         
-    def _update_memory_access(self, tx, memories: list[str], feedback: FeedbackType=FeedbackType.NEUTRAL):
+    def _update_memory_access(self, tx, memories: list[str], feedback: FeedbackType=FeedbackType.NEUTRAL) -> list[str]:
         query = """
         UNWIND $mem_ids AS mem_id
         MATCH (m:Memory {id: mem_id})
         SET m.last_access = timestamp(),
             m.total_access_count = coalesce(m.total_access_count, 0) + 1
+        
+        RETURN m.id AS mem_id
         """
         
         if feedback == FeedbackType.POSITIVE:
@@ -757,11 +759,15 @@ class Neo4jMemory(GraphMemory):
         elif feedback == FeedbackType.NEGATIVE:
             query += ", m.negative_access_count = coalesce(m.negative_access_count, 0) + 1"
 
-        tx.run(query, mem_ids=memories)
+        result = tx.run(query, mem_ids=memories)
+        ids = [record.get('mem_id', None) for record in result]
+        ids = [id for id in ids if id is not None]
+        return ids
         
-    def update_memory_access(self, memories: list[str], feedback: FeedbackType=FeedbackType.NEUTRAL):
+    def update_memory_access(self, memories: list[str], feedback: FeedbackType=FeedbackType.NEUTRAL) -> list[str]:
         try:
             with self.driver.session(database=self.database) as session:
-                session.execute_write(self._update_memory_access, memories, feedback)
+                return session.execute_write(self._update_memory_access, memories, feedback)
         except Exception as e:
             logging.error(f"Error updating memory access: {e}")
+            return []
