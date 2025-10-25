@@ -771,3 +771,65 @@ class Neo4jMemory(GraphMemory):
         except Exception as e:
             logging.error(f"Error updating memory access: {e}")
             return []
+        
+    def _query_memory_series(self, tx, origin_memory_id: str, previous_n: int = 2, next_n: int = 2) -> list[Memory]:
+        """
+        Fetches a single series of Memory nodes centered around an origin,
+        going back 'previous' steps and forward 'next' steps.
+        
+        
+        """
+
+        if not isinstance(previous_n, int) or previous_n < 0:
+            previous_n = 2
+        if not isinstance(next_n, int) or next_n < 0:
+            next_n = 2
+
+        query = """
+        // 1. Find the origin node
+        MATCH (origin:Memory {id: $origin_id})"""+f"""
+
+        // 2. Find all paths ending at origin, pick the longest one within limit
+        OPTIONAL MATCH path_prev = (prev_mem:Memory)-[:NEXT_IN_SERIES*0..{previous_n}]->(origin)
+        WITH origin, path_prev
+        ORDER BY length(path_prev) DESC
+        LIMIT 1
+
+        // 3. Get nodes from that path. Default to [origin] if no path found.
+        //    The path list is ordered: [earliest_node, ..., origin]
+        WITH origin, coalesce(nodes(path_prev), [origin]) AS prev_path_nodes
+
+        // 4. Find all paths starting at origin, pick the longest one within limit
+        OPTIONAL MATCH path_next = (origin)-[:NEXT_IN_SERIES*0..{next_n}]->(next_mem:Memory)
+        WITH prev_path_nodes, path_next, origin
+        ORDER BY length(path_next) DESC
+        LIMIT 1
+
+        // 5. Get nodes from that path. Default to [origin] if no path found.
+        //    The path list is ordered: [origin, ..., latest_node]
+        WITH prev_path_nodes, coalesce(nodes(path_next), [origin]) AS next_path_nodes
+
+        // 6. Combine the lists.
+        //    prev_path_nodes[0..-1] takes all nodes *except* the last one (the origin)
+        //    + next_path_nodes appends the list that *starts* with the origin
+        //    This creates the final de-duplicated, ordered list.
+        WITH prev_path_nodes[0..-1] + next_path_nodes AS memory_series
+        UNWIND memory_series AS m
+        OPTIONAL MATCH (m)-[:SOURCED_FROM]->(s:Source)""" +"""
+        RETURN m AS node,
+            s.name AS source,
+            [(m)-[men:MENTIONS]->(e:Entity) | {name: e.name, count: men.count}] AS entities,
+            [(m)-[:AUTHORED_BY]->(a:Author) | a.name] AS authors
+        
+        """
+        result = tx.run(query, origin_id=origin_memory_id)
+        return [self._record_to_memory(record) for record in result]
+    
+    def query_memory_series(self, origin_memory_id: str, previous: int = 2, next: int = 2) -> list[Memory]:
+        try:
+            with self.driver.session(database=self.database) as session:
+                memories = session.execute_read(self._query_memory_series, origin_memory_id, previous, next)
+                return memories
+        except Exception as e:
+            logging.error(f"Error querying memory series: {e}")
+            return []

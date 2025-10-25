@@ -205,6 +205,28 @@ class GraphMemory(ABC):
             The list of memory IDs that were successfully updated.
         """
         pass
+    
+    @abstractmethod
+    def query_memory_series(self, origin_memory_id: str, previous: int = 2, next: int = 2) -> list[Memory]:
+        """
+        Query a series of memories linked to a given origin memory.
+        Retrieves a specified number of previous and next memories in the series.
+
+        Parameters
+        ----------
+        origin_memory_id : str
+            The ID of the origin memory.
+        previous : int
+            The number of previous memories to retrieve.
+        next : int
+            The number of next memories to retrieve.
+
+        Returns
+        -------
+        list[Memory]
+            The list of memories in the series, including the origin memory.
+        """
+        pass
 
 class Neo4jPlaceholder(GraphMemory):
     def is_connected(self) -> bool:

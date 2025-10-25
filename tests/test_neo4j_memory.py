@@ -119,4 +119,12 @@ assert_verbose(access_count_increased=access_count_increased)
 positive_feedback_increased = updated_memory.positive_access_count == (memory_sequence[0].positive_access_count + 1)
 assert_verbose(positive_feedback_increased=positive_feedback_increased)
 
+# test querying memory series
+series_memories = db.query_memory_series(memory_sequence[2].id, previous=4, next=2)
+expected_series_size = 5  # 2 previous (4 given, but only 2 prev in series) + 1 origin + 2 next
+assert_verbose(series_size=len(series_memories), expected_size=expected_series_size)
+expected_ids = {memory_sequence[0].id, memory_sequence[1].id, memory_sequence[2].id, memory_sequence[3].id, memory_sequence[4].id}
+retrieved_ids = {mem.id for mem in series_memories}
+assert_verbose(series_ids_match=retrieved_ids == expected_ids)
+
 print("All tests passed successfully.")
