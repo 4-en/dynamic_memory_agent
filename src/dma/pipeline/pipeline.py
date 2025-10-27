@@ -258,6 +258,8 @@ class Pipeline:
         ----------
         conversation : Conversation
             The conversation to generate a response from.
+        progress_callback : Callable[[PipelineUpdate], None] | None
+            A callback to call with progress updates.
         args
             Additional arguments.
         kwargs
