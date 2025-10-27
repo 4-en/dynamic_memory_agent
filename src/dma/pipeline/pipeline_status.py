@@ -15,6 +15,10 @@ class PipelineStatus(Enum):
     
 @dataclass
 class PipelineUpdate:
+    """
+    Represents an update in the pipeline's status.
+    
+    Final status updates will have status=COMPLETED or status=ERROR."""
     status: PipelineStatus = PipelineStatus.QUERY_GENERATION
     message: str | None = None
     progress: float = 0.0
