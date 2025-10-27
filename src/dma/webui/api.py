@@ -12,12 +12,18 @@ from dma.core import Conversation, Message, Role
 # --- Pydantic Models ---
 # Model for a single message in the chat history
 class ChatMessage(BaseModel):
-    role: str
+    role: str # "USER" | "ASSISTANT"
     content: str
+    
+    def from_message(msg: Message) -> "ChatMessage":
+        return ChatMessage(role=msg.role.value, content=msg.message_text)
 
 # Model for the user's chat request
 class ChatRequest(BaseModel):
     message: str
+    
+    def to_message(self) -> Message:
+        return Message(role=Role.USER, content=self.message)
 
 class DMAWebUI:
     def __init__(self):
@@ -26,6 +32,12 @@ class DMAWebUI:
         script_dir = pathlib.Path(__file__).parent.resolve()
         static_dir = script_dir / "static"
         self.static_dir = static_dir
+        
+        print("Loading pipeline...")
+        self.pipeline = Pipeline()
+        print("Pipeline loaded.")
+        self.conversation = Conversation()
+        self._generating_response = False
         
         app = FastAPI()
         self.app = app
@@ -49,12 +61,11 @@ class DMAWebUI:
 
     async def get_history(self):
         """
-        Returns a mock chat history.
-        In a real app, you'd fetch this from a database.
+        Returns the chat history as a list of ChatMessage objects.
         """
-        # Placeholder: Just return a welcome message
+        
         return [
-            {"role": "assistant", "content": "Hi! I'm a demo assistant. How can I help?"}
+            ChatMessage.from_message(msg) for msg in self.conversation.messages if msg.role in [Role.USER, Role.ASSISTANT]
         ]
 
     async def dummy_llm_responder(self, user_message: str):
@@ -88,6 +99,35 @@ class DMAWebUI:
         for chunk in response_chunks:
             yield chunk
             await asyncio.sleep(0.05) # Simulate network/compute delay
+            
+    async def generate_response(self, chat_request: ChatRequest):
+        # for nowm only allow one response at a time
+        # we can handle this better later
+        if self._generating_response:
+            yield "Error: Already generating a response. Please wait."
+            return
+        
+        self._generating_response = True
+        try:
+            self.conversation.add_message(chat_request.to_message())
+            response = self.pipeline.generate(self.conversation)
+            if response is None:
+                yield "Error: No response generated."
+                return
+            self.conversation.add_message(response)
+            all_responses = []
+            thought_text = response.reasoning_text or ""
+            if thought_text:
+                all_responses.append(f"[THOUGHT]{thought_text}\n")
+            all_responses.append(f"[RESPONSE]{response.message_text}")
+            full_response = "\n".join(all_responses)
+            # stream the response word by word
+            for chunk in full_response.split(' '):
+                yield chunk + ' '
+                await asyncio.sleep(0.05) # Simulate network/compute delay
+        finally:
+            self._generating_response = False
+            
 
 
     async def chat(self,request: ChatRequest):
@@ -95,7 +135,7 @@ class DMAWebUI:
         Receives a user message and returns a streaming response.
         """
         return StreamingResponse(
-            self.dummy_llm_responder(request.message),
+            self.generate_response(request),
             media_type="text/plain"
         )
 
