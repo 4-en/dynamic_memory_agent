@@ -4,7 +4,7 @@ services:
       context: .
       dockerfile: Dockerfile
       # target is set by overlays
-    container_name: ${COMPOSE_PROJECT_NAME:-myproject}_app
+    container_name: ${COMPOSE_PROJECT_NAME:-dynmem}_app
     depends_on:
       - neo4j
     environment:
@@ -20,7 +20,7 @@ services:
 
   neo4j:
     image: neo4j:5
-    container_name: ${COMPOSE_PROJECT_NAME:-myproject}_neo4j
+    container_name: ${COMPOSE_PROJECT_NAME:-dynmem}_neo4j
     environment:
       NEO4J_AUTH: ${NEO4J_USER:-neo4j}/${NEO4J_PASSWORD:-testtest}
       NEO4J_PLUGINS: '["apoc"]'

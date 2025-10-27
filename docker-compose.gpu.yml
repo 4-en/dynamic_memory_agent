@@ -2,7 +2,7 @@ services:
   app:
     build:
       target: final-cuda
-    image: myproject:cuda
+    image: dynmem:cuda
     deploy:
       resources:
         reservations:
