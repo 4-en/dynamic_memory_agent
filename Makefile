@@ -1,5 +1,5 @@
 # -------- Settings --------
-VARIANT       ?= gpu
+VARIANT       ?= cpu
 DC            ?= docker compose
 COMPOSE_FILES = -f docker-compose.yml -f docker-compose.$(VARIANT).yml
 PROJECT_NAME  ?= $(notdir $(CURDIR))

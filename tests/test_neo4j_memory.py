@@ -127,4 +127,11 @@ expected_ids = {memory_sequence[0].id, memory_sequence[1].id, memory_sequence[2]
 retrieved_ids = {mem.id for mem in series_memories}
 assert_verbose(series_ids_match=retrieved_ids == expected_ids)
 
+# test deep relationship traversal
+res = db.deep_relationship_traversal("test_memory_3", max_depth=3, stop_k=10)
+assert_verbose(traversal_results=len(res), expected_n=2)  # should find two related memories
+# one should be 2 away (score 1/2), one should be 3 away (score 1/3)
+expected_scores = {1/2, 1/3}
+retrieved_scores = {gr.score for gr in res}
+assert_verbose(traversal_scores_match=retrieved_scores == expected_scores)
 print("All tests passed successfully.")

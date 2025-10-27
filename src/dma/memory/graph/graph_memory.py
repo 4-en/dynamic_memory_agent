@@ -227,6 +227,36 @@ class GraphMemory(ABC):
             The list of memories in the series, including the origin memory.
         """
         pass
+    
+    @abstractmethod
+    def deep_relationship_traversal(self, memory_id: str, max_depth: int = 3, stop_k: int = 50, blacklist_ids: list[str] = []) -> list[GraphResult]:
+        """
+        Perform a deep traversal of relationships starting from a given memory.
+        Explores connected memories up to a specified depth, avoiding blacklisted memories.
+
+        Parameters
+        ----------
+        memory_id : str
+            The ID of the starting memory.
+        max_depth : int
+            The maximum depth to traverse.
+        stop_k : int
+            When to stop the traversal based on number of memories found.
+            This might return more than stop_k if multiple memories are found at the same depth,
+            but doesn't go any deeper once stop_k is reached.
+        blacklist_ids : list[str]
+            A list of memory IDs to avoid during traversal.
+
+        Returns
+        -------
+        list[GraphResult]
+            The list of traversed memories along with their scores.
+            Score are 1/depth to prioritize closer memories.
+        """
+        
+        # TODO: add type of relationship for scoring
+        # e.g., stronger relationships yield higher scores
+        pass
 
 class Neo4jPlaceholder(GraphMemory):
     def is_connected(self) -> bool:

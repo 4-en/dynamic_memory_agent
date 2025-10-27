@@ -833,3 +833,47 @@ class Neo4jMemory(GraphMemory):
         except Exception as e:
             logging.error(f"Error querying memory series: {e}")
             return []
+        
+    def _deep_relationship_traversal(self, tx, memory_id: str, max_depth: int = 3, stop_k: int = 50, blacklist_ids: list[str] = []) -> list[GraphResult]:
+        query = """
+        // Start from your origin node
+        MATCH (start:Memory {id: $originId})
+
+        // Call the APOC path expander
+        CALL apoc.path.expandConfig(start, {
+            maxLevel: $maxDepth,
+            bfs: true,                  // Use Breadth-First Search
+            uniqueness: 'NODE_GLOBAL'   // Visit each node only once
+            // use blacklistNodes to stop traversal at blacklisted nodes
+        }) YIELD path
+
+        // Get the end node of each path
+        WITH last(nodes(path)) AS end, length(path) AS depth
+
+        // Filter for :Memory nodes, exclude the start node,
+        // AND apply the blacklist
+        WHERE end:Memory
+        AND end.id <> $originId
+        AND NOT end.id IN $blacklist  // ◀ NEW: Exclude blacklisted IDs
+
+        // Order by depth and apply your limit
+        ORDER BY depth
+        LIMIT $maxResults
+        OPTIONAL MATCH (end)-[:SOURCED_FROM]->(s:Source)
+
+        RETURN end as node, depth, s.name AS source,
+            [(end)-[men:MENTIONS]->(e:Entity) | {name: e.name, count: men.count}] AS entities,
+            [(end)-[:AUTHORED_BY]->(a:Author) | a.name] AS authors
+        """
+        
+        result = tx.run(query, originId=memory_id, maxDepth=max_depth, maxResults=stop_k, blacklist=blacklist_ids)
+        return [(self._record_to_memory(record), 1 / max(record['depth'], 0.5)) for record in result]
+    
+    def deep_relationship_traversal(self, memory_id: str, max_depth: int = 3, stop_k: int = 50, blacklist_ids: list[str] = []) -> list[GraphResult]:
+        try:
+            with self.driver.session(database=self.database) as session:
+                mem_list = session.execute_read(self._deep_relationship_traversal, memory_id, max_depth, stop_k, blacklist_ids)
+                return [GraphResult(memory=mem, score=score) for mem, score in mem_list]
+        except Exception as e:
+            logging.error(f"Error in deep relationship traversal: {e}")
+            return []
