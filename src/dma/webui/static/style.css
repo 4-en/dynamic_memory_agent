@@ -1,7 +1,7 @@
 /* --- Color Palette using CSS Variables --- */
 :root {
     --bg-color: #f4f7f6;
-    --chat-container-bg: #ffffff;
+    --chat-container-bg: transparent;
     --text-color: #333;
     --assistant-message-bg: #e9ecef;
     --user-message-bg: #007bff;
@@ -23,7 +23,7 @@
 
 .dark-mode {
     --bg-color: #121212;
-    --chat-container-bg: #1e1e1e;
+    --chat-container-bg: transparent;
     --text-color: #e0e0e0;
     --assistant-message-bg: #333333;
     --user-message-bg: #375a7f;
@@ -50,6 +50,7 @@ body {
     display: flex;
     justify-content: center;
     align-items: center;
+    flex-direction: column;
     height: 100vh;
     transition: background-color 0.3s, color 0.3s;
 }
@@ -58,10 +59,11 @@ body {
 .chat-container {
     width: 100%;
     max-width: 800px; 
-    height: 90vh;
+    /* fill available height minus some margin */
+    height: calc(100vh - 40px);
     background-color: var(--chat-container-bg);
     border-radius: 12px;
-    box-shadow: 0 4px 12px var(--shadow-color);
+    /*box-shadow: 0 4px 12px var(--shadow-color);*/
     display: flex;
     flex-direction: column;
     overflow: hidden;
@@ -71,9 +73,13 @@ body {
 /* --- Header Bar for Toggle --- */
 .header-bar {
     display: flex;
+    box-sizing: border-box;
     justify-content: flex-end;
     padding: 10px 15px;
     border-bottom: 1px solid var(--border-color);
+    background-color: var(--form-bg);
+    transition: background-color 0.3s, border-color 0.3s;
+    width: 100%;
 }
 
 #theme-toggle {
@@ -164,10 +170,14 @@ html:not(.dark-mode) .icon-sun {
 }
 
 .assistant-message.retrieval-message {
-    background-color: var(--assistant-message-bg);
-    color: var(--text-color);
-    border-bottom-left-radius: 5px;
+    background-color: transparent;
+    color: var(--thought-text-color);
+    border: 1px dashed var(--thought-border-color);
+    font-size: 0.85em;
     font-style: italic;
+    border-radius: 10px;
+    padding: 8px 14px;
+    max-width: 70%;
 }
 
 .assistant-message.summary-message {
@@ -188,46 +198,75 @@ html:not(.dark-mode) .icon-sun {
     align-self: center;
 }
 
+.info-message.error-message {
+    background-color: #f8d7da;
+    color: #721c24;
+    border: 1px solid #f5c6cb;
+}
+
 /* --- Input Form Area --- */
 .chat-form {
     display: flex;
-    padding: 20px;
-    border-top: 1px solid var(--border-color);
-    background-color: var(--form-bg);
+    padding: 10px;
+    margin: 10px;
+    border: 1px solid var(--border-color);
+    background-color: transparent;
     transition: background-color 0.3s, border-color 0.3s;
+    border-radius: 20px;
+    flex-direction: column;
 }
 
 #message-input {
     flex-grow: 1;
-    border: 1px solid var(--input-border-color);
-    background-color: var(--input-bg);
+    border: 0;
+    background-color: transparent;
     color: var(--text-color);
-    border-radius: 20px;
-    padding: 12px 18px;
+    padding: 4px;
     font-size: 16px;
     outline: none;
     transition: border-color 0.2s, background-color 0.3s, color 0.3s;
+    
+    /* Dynamic Height with Limit */
+    height: 30px;       /* Starts at 30px (e.g., one line) */
+    max-height: 100px;  /* Stops growing at 100px */
+    overflow-y: auto;   /* Adds a scrollbar when content exceeds 100px */
+    
+    /* Removes the manual resize handle */
+    resize: none; 
 }
 
 #message-input:focus {
     border-color: var(--input-focus-border-color);
 }
 
+.input-container {
+    display: flex;
+    justify-content: flex-end;
+    margin-top: 10px;
+    flex-direction: row;
+}
+
 .chat-form button {
-    background-color: var(--button-bg);
-    color: white;
-    border: none;
+    background-color: transparent;
+    color: var(--text-color);
+    border: 1px solid var(--button-bg);
     border-radius: 20px;
-    padding: 12px 20px;
+    padding: 6px 20px;
     margin-left: 10px;
     cursor: pointer;
-    font-size: 16px;
-    font-weight: 600;
+    font-size: 14px;
+    font-weight: 400;
     transition: background-color 0.2s;
+}
+
+.spacer {
+    flex-grow: 1;
 }
 
 .chat-form button:hover {
     background-color: var(--button-hover-bg);
+    border: 1px solid var(--button-hover-bg);
+    color: #fff;
 }
 
 .chat-form button:disabled {

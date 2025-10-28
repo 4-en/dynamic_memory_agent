@@ -501,6 +501,14 @@ class Pipeline:
             
             self._update_progress(
                 progress_callback,
+                PipelineStatus.QUERY_UPDATE,
+                "Retrieval queries generated.",
+                current_step / total_steps,
+                retrieval_step=retrieval.steps[-1]
+            )
+            
+            self._update_progress(
+                progress_callback,
                 PipelineStatus.RETRIEVAL,
                 "Performing retrieval...",
                 current_step / total_steps,

@@ -345,9 +345,14 @@ class Retrieval:
         
         if self.final_summary == "":
             self.final_summary = "Okay, this is what I know:\n"
+            memory_summary = ""
             for step in self.steps:
                 for result in step.results:
-                    self.final_summary += f"- {result.memory.memory}\n"
+                    memory_summary += f"- {result.memory.memory}\n"
+            
+            if memory_summary == "":
+                return None
+            self.final_summary += memory_summary
             self.final_summary += "\nI should use think about the relevant information and then respond accordingly."
                     
         self._last_summary_count = total_memories

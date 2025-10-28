@@ -19,7 +19,7 @@ class ChatMessage(BaseModel):
     content: str
     
     def from_message(msg: Message) -> "ChatMessage":
-        return ChatMessage(role=msg.role.value, content=msg.message_text)
+        return ChatMessage(role=msg.role.value.lower(), content=msg.message_text or "")
 
 # Model for the user's chat request
 class ChatRequest(BaseModel):
@@ -68,7 +68,7 @@ class DMAWebUI:
         """
         
         return [
-            ChatMessage.from_message(msg) for msg in self.conversation.messages if msg.role in [Role.USER, Role.ASSISTANT]
+            ChatMessage.from_message(msg) for msg in self.conversation.messages if msg.role in [Role.USER, Role.ASSISTANT] and msg.message_text
         ]
 
     async def dummy_llm_responder(self, user_message: str):
