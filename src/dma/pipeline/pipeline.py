@@ -242,9 +242,13 @@ class Pipeline:
                 progress=progress,
                 retrieval_step=retrieval_step
             )
-            callback(update)
+            try:
+                # since this is a user provided callback, we need to catch any exceptions
+                callback(update)
+            except Exception as e:
+                logging.error(f"Error during progress update: {e}")
 
-    def generate(
+    def _generate(
         self, 
         conversation: Conversation, 
         progress_callback: Callable[[PipelineUpdate], None] | None = None,
@@ -399,6 +403,50 @@ class Pipeline:
         
         return response
     
+    def generate(
+        self, 
+        conversation: Conversation, 
+        progress_callback: Callable[[PipelineUpdate], None] | None = None,
+        *args, 
+        **kwargs
+        ) -> Message | None:
+        """
+        Generate a response based on the conversation.
+
+        Parameters
+        ----------
+        conversation : Conversation
+            The conversation to generate a response from.
+        progress_callback : Callable[[PipelineUpdate], None] | None
+            A callback to call with progress updates.
+        args
+            Additional arguments.
+        kwargs
+            Additional keyword arguments.
+
+        Returns
+        -------
+        Message | None
+            The generated response.
+            If no response was generated, return None.
+            This can happen if the pipeline is setup to decide 
+            whether to generate a response or not, for example if
+            the message wasn't directed at the AI.
+            The generated response if no
+        """
+        
+        try:
+            return self._generate(conversation, progress_callback, *args, **kwargs)
+        except Exception as e:
+            logging.error(f"Error during generation: {e}")
+            self._update_progress(
+                progress_callback,
+                PipelineStatus.ERROR,
+                f"Error during generation: {e}",
+                1.0
+            )
+            raise e
+    
     def _get_test_memories(self) -> list[Memory]:
         """
         Get test memories for testing purposes.
@@ -433,22 +481,6 @@ class Pipeline:
         # could be trained using saved conversations and whether they led to retrieval or not
         # for now, we will just evaluate every time and stop when no queries are generated
         # generate queries
-        
-        # not implemented yet
-        # test logic here (remove later):
-        retrieval = self.query_generator.generate_queries(conversation, retrieval)
-        if retrieval.done or len(retrieval.steps) == 0:
-            logging.debug("Retrieval marked as done or no retrieval steps, skipping retrieval.")
-            return
-        
-        last_step = retrieval.steps[-1]
-        if len(last_step.queries) == 0:
-            logging.debug("No queries generated, skipping retrieval.")
-            return
-        for test_memory in self._get_test_memories():
-            last_step.results.append(MemoryResult(memory=test_memory, score=1.0))
-        
-        return
         
         if (not self.query_generator) or (not self.retriever):
             logging.warning("No query generator or retriever set, skipping retrieval.")
@@ -501,6 +533,8 @@ class Pipeline:
                 current_step / total_steps,
                 retrieval_step=last_step
             )
+            
+            # TODO: add step summary generation here?
 
         return
     

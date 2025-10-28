@@ -7,7 +7,10 @@ from starlette.middleware.cors import CORSMiddleware
 import pathlib
 
 from dma.pipeline import Pipeline, PipelineUpdate, PipelineStatus
-from dma.core import Conversation, Message, Role
+from dma.core import Conversation, Message, Role, RetrievalStep, RetrievalQuery
+import logging
+
+logging.basicConfig(level=logging.DEBUG)
 
 # --- Pydantic Models ---
 # Model for a single message in the chat history
@@ -107,74 +110,78 @@ class DMAWebUI:
         """
         return ""
     
-    async def consume_and_send_updates(self, queue: asyncio.Queue, main_task: asyncio.Future):
+    async def _handle_pipeline_updates(self, queue: asyncio.Queue):
         """
         Asynchronously consumes updates from the queue, sends them to a server,
         and stops once the main_task completes.
         """
         
-        # 1. Wrap the concurrent.futures.Future in an awaitable Task
-        main_task_awaitable = asyncio.ensure_future(main_task)
 
         
         print("Starting to monitor generation task and queue...")
 
-        while True:
+        completed = False
+        while not completed:
             try:
-                # 2. Create a task to wait for the next queue item
-                queue_get_task = asyncio.ensure_future(queue.get())
-
-                # 3. Concurrently wait for either a queue item or the main task to finish
-                done, pending = await asyncio.wait(
-                    [queue_get_task, main_task_awaitable],
-                    return_when=asyncio.FIRST_COMPLETED
-                )
-
-                # --- A. Check Task Completion ---
-                if main_task_awaitable in done:
-                    # The main generation task has finished.
-                    print("Generation task finished. Draining remaining queue items...")
-                    
-                    # Cancel the pending queue_get_task
-                    if queue_get_task in pending:
-                        queue_get_task.cancel()
-                    
-                    # Drain and process any remaining items the producer might have put
-                    # just before finishing.
-                    while not queue.empty():
-                        update = queue.get_nowait()
-                        result = self.convert_pipeline_update(update)
-                        if result:
-                            yield result
-                        queue.task_done()
-                    
-                    # Check for and re-raise any exception from the main task
-                    if main_task_awaitable.exception():
-                        raise main_task_awaitable.exception()
-                        
-                    break  # Exit the loop
-
-                # --- B. Process Queue Update ---
-                if queue_get_task in done:
-                    # An update arrived
-                    update = queue_get_task.result()
-                    queue.task_done()
-                    
-                    # ASYNCHRONOUSLY send the update to the server
-                    result = self.convert_pipeline_update(update)
-                    if result:
-                        yield result
-                    
-                    # Continue the loop to wait for the next update or task completion
+                # get PipelineUpdate from queue until status is COMPLETED or ERROR
+                update: PipelineUpdate = await queue.get()
+                if update.status in [PipelineStatus.COMPLETED, PipelineStatus.ERROR]:
+                    completed = True
                 
-            except asyncio.CancelledError:
-                # Handle cancellation if the consumer itself is cancelled
-                print("Consumption task cancelled.")
-                raise
-            
-        # return main task message
-        response = main_task_awaitable.result()
-        yield response.message_text
+                print("Received pipeline update:", update.message)
+                    
+                match update.status:
+                    case PipelineStatus.QUERY_UPDATE:
+                        s = "[QUERY]Querying database...\n"
+                        step: RetrievalStep = update.retrieval_step
+                        if step is None or len(step.queries) == 0:
+                            continue
+                        for query in step.queries:
+                            s += f" - {query.embedding_query.query_text}\n"
+                        yield s
+                    case PipelineStatus.RETRIEVAL_UPDATE:
+                        s = "[RETRIEVAL]Retrieving information...\n"
+                        step: RetrievalStep = update.retrieval_step
+                        if step is None or len(step.results) == 0:
+                            yield "[RETRIEVAL]No results found.\n"
+                            continue
+                        for result in step.results:
+                            s += f" - {result.memory.memory}\n"
+                        yield s
+                    case _:
+                        # for other statuses, we don't yield anything for now
+                        continue
+            except Exception as e:
+                yield f"[ERROR]An error occurred while processing pipeline updates: {str(e)}"
+                completed = True
+        
+                        
+        
+    def _handle_pipeline_response(self, response:Message)->str:
+        """
+        Process the final response from the pipeline.
+        Currently a placeholder for future implementation.
+        """
+        if response is None:
+            return "Error: No response generated."
+        
+        full_text = ""
+        thought_text = response.reasoning_text or ""
+        if thought_text:
+            full_text += f"[THOUGHT]{thought_text}\n"
+        content = response.message_text or ""
+        if content:
+            full_text += f"[RESPONSE]{content}\n"
+            self.conversation.add_message(response)
+        else:
+            return "Error: Empty response."
+        
+        # add metadata info if available
+        if response.source_ids:
+            full_text += "\n**Sources:**\n"
+            full_text += "\n".join(f" - {source_id}" for source_id in response.source_ids)
+
+        return full_text
             
     async def generate_response(self, chat_request: ChatRequest):
         # for nowm only allow one response at a time
@@ -194,28 +201,19 @@ class DMAWebUI:
             main_future = loop.run_in_executor(None, self.pipeline.generate, self.conversation, lambda update: queue.put_nowait(update))
             main_task = asyncio.ensure_future(main_future)
             
-            async for update in self.consume_and_send_updates(queue, main_task):
+            async for update in self._handle_pipeline_updates(queue):
+                print(update)
                 yield update
                 
             response = await main_task
-            
-            
-            if response is None:
-                yield "[RESPONSE]Error: No response generated."
-                return
-            
-            thought_text = response.reasoning_text or ""
-            if thought_text:
-                yield f"[THOUGHTS]{thought_text}"
-            content = response.message_text or ""
-            if content:
-                yield f"[RESPONSE]{content}"
-                self.conversation.add_message(response)
-            else:
-                yield "[RESPONSE]Error: Empty response."
-            
-            
-            
+
+
+            yield self._handle_pipeline_response(response)
+
+
+        except Exception as e:
+            yield f"[ERROR]An error occurred during response generation: {str(e)}"
+
         finally:
             self._generating_response = False
             

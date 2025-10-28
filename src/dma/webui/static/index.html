@@ -107,6 +107,9 @@
                 let responseElementRaw = null;
 
                 const START_TOKENS = {
+                    info: '[INFO]',
+                    query: '[QUERY]',
+                    retrieval: '[RETRIEVAL]',
                     thought: '[THOUGHT]',
                     response: '[RESPONSE]'
                 };
@@ -124,6 +127,8 @@
                         // If we're already in the response, just append, unless new start token found
                         let newTokenFound = false;
                         for (const token of Object.values(START_TOKENS)) {
+                            // TODO; handle cut off tokens between chunks
+                            // basically wait until we have enough buffer to be sure its a token or not
                             const tokenIndex = buffer.indexOf(token);
                             if (tokenIndex !== -1) {
                                 // Append content before the new token
@@ -144,8 +149,15 @@
                         for (const [type, token] of Object.entries(START_TOKENS)) {
                             const tokenIndex = buffer.indexOf(token);
                             if (tokenIndex !== -1) {
+
+                                // if token is [INFO], add a special info message
+                                let assistantRole = 'assistant';
+                                if (type === 'info') {
+                                    assistantRole = 'info';
+                                }
+
                                 // Create new message element
-                                responseElement = addMessage('assistant', type, '');
+                                responseElement = addMessage(assistantRole, type, '');
                                 responseElementRaw = ""; // For potential future use
                                 buffer = buffer.substring(tokenIndex + token.length);
                                 responseStarted = true;
