@@ -331,6 +331,13 @@ class Pipeline:
                 pre_query = RetrievalQuery.from_entities(entities, weight=1.0)
                 pre_step = RetrievalStep(queries=[pre_query], is_pre_query=True)
                 retrieval.add_step(pre_step)
+                self._update_progress(
+                    progress_callback,
+                    PipelineStatus.QUERY_UPDATE,
+                    "Created pre-retrieval query based on extracted entities.",
+                    current_step / total_steps,
+                    retrieval_step=pre_step
+                )
                 # since this is the pre-query, we don't count it against the max iterations
                 retrieval.current_iteration -= 1
                 
@@ -342,7 +349,8 @@ class Pipeline:
                     retrieval_step=pre_step
                 )
 
-                self.retriever.retrieve(pre_query, top_k=self.config.retrieval_num_results)
+                results = self.retriever.retrieve(pre_step, top_k=self.config.retrieval_num_results)
+                pre_step.results.extend(results)
                 
                 current_step += 1
                 

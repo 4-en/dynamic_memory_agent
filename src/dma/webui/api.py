@@ -12,7 +12,7 @@ from dma.core import Conversation, Message, Role, RetrievalStep, RetrievalQuery
 import logging
 import json
 
-logging.basicConfig(level=logging.DEBUG)
+
 
 # --- Pydantic Models ---
 # Model for a single message in the chat history
@@ -104,16 +104,48 @@ class DMAWebUI:
                 if update.status in [PipelineStatus.COMPLETED, PipelineStatus.ERROR]:
                     completed = True
                 
-                print("Received pipeline update:", update.message)
-                    
+                # print("Received pipeline update:", update.message)
+                
+                # format updates based on status as markdown strings
                 match update.status:
                     case PipelineStatus.QUERY_UPDATE:
-                        s = "Querying database...\n"
                         step: RetrievalStep = update.retrieval_step
                         if step is None or len(step.queries) == 0:
                             continue
+                        
+                        if step.clarification_needed:
+                            yield StreamingResponseChunk(
+                                type="query",
+                                content="User clarification needed."
+                            )
+                            continue
+                        
+                        s = "Querying database...\n"
+                        queries = []
                         for query in step.queries:
-                            s += f" - {query.embedding_query.query_text}\n"
+                            temp = ""
+                            q_text = query.embedding_query.query_text if query.embedding_query else ""
+                            entities = [e.entity for e in query.entity_queries]
+                            if q_text:
+                                temp += f"Q: {q_text}\n"
+                            if len(entities) > 0:
+                                temp += "E: **" + ", ".join(entities) + "**\n"
+                            queries.append(temp)
+
+                        queries = [q.strip() for q in queries if q.strip() != ""]
+                        if len(queries) == 0:
+                            continue
+                        with_index = len(step.queries) > 1
+                        for i, q in enumerate(queries):
+                            if with_index:
+                                s += f"{i+1}. "
+                                # add indent to all lines except first
+                                q_lines = q.split("\n")
+                                s += q_lines[0] + "\n"
+                                for line in q_lines[1:]:
+                                    s += "    " + line + "\n"
+                            else:
+                                s += f"{q}\n"
                         yield StreamingResponseChunk(type="query", content=s)
                     case PipelineStatus.RETRIEVAL_UPDATE:
                         s = "Retrieving information...\n"
@@ -122,7 +154,12 @@ class DMAWebUI:
                             yield StreamingResponseChunk(type="retrieval", content="No results found.\n")
                             continue
                         for result in step.results:
-                            s += f" - {result.memory.memory}\n"
+                            s += f"- "
+                            # add indent to all lines except first
+                            r_lines = result.content.split("\n")
+                            s += r_lines[0] + "\n"
+                            for line in r_lines[1:]:
+                                s += "    " + line + "\n"
                         yield StreamingResponseChunk(type="retrieval", content=s)
                     case _:
                         # for other statuses, we don't yield anything for now
@@ -213,7 +250,8 @@ class DMAWebUI:
         Converts StreamingResponseChunk objects to JSON bytes for streaming.
         """
         async for chunk in chunk_generator:
-            json_bytes = (json.dumps(chunk.dict()) + "\n").encode("utf-8")
+            # print("Sending chunk:", chunk.content)
+            json_bytes = (json.dumps(chunk.model_dump(mode="json")) + "\n").encode("utf-8")
             yield json_bytes
 
     async def chat(self,request: ChatRequest):
@@ -221,7 +259,7 @@ class DMAWebUI:
         Receives a user message and returns a streaming response.
         """
         return StreamingResponse(
-            self.chunks_to_json_stream(self.yield_word_by_word_wrapper(self.generate_response(request))),
+            self.chunks_to_json_stream(self.generate_response(request)),
             media_type="application/json"
         )
 
@@ -234,6 +272,7 @@ def launch_webui():
     Launch the FastAPI web UI for the Dynamic Memory Agent.
     """
     import uvicorn
+    logging.basicConfig(level=logging.DEBUG)
     app_instance = DMAWebUI()
     app = app_instance.app
     uvicorn.run(app, host="0.0.0.0", port=8000)
