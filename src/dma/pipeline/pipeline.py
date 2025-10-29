@@ -389,6 +389,10 @@ class Pipeline:
             "Generating final response...",
             current_step / total_steps
         )
+        
+        # debug: print conversation
+        for msg in conversation.messages:
+            print(f"{msg.role.value}: {msg.message_text}")
 
         # Generate response
         # print(f"Request: {conversation}")

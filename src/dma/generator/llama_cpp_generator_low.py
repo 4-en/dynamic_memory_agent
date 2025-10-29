@@ -351,9 +351,9 @@ class LowLevelLlamaCppGenerator(BaseGenerator):
 
         message_str = self.generate_input_string_qwen2_basic(conversation)
 
-        #print("=== Input to model ===")
-        #print(message_str)
-        #print("======================")
+        print("=== Input to model ===")
+        print(message_str)
+        print("======================")
         
         response = self.model(
             prompt=message_str,
