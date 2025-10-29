@@ -120,16 +120,16 @@ class DMAWebUI:
                             )
                             continue
                         
-                        s = "Querying database...\n"
+                        s = "Querying database...  \n"
                         queries = []
                         for query in step.queries:
                             temp = ""
                             q_text = query.embedding_query.query_text if query.embedding_query else ""
                             entities = [e.entity for e in query.entity_queries]
                             if q_text:
-                                temp += f"Q: {q_text}\n"
+                                temp += f"Q: {q_text}  \n"
                             if len(entities) > 0:
-                                temp += "E: **" + ", ".join(entities) + "**\n"
+                                temp += "E: *" + ", ".join(entities) + "*"
                             queries.append(temp)
 
                         queries = [q.strip() for q in queries if q.strip() != ""]
@@ -141,14 +141,14 @@ class DMAWebUI:
                                 s += f"{i+1}. "
                                 # add indent to all lines except first
                                 q_lines = q.split("\n")
-                                s += q_lines[0] + "\n"
+                                s += q_lines[0] + "  \n"
                                 for line in q_lines[1:]:
-                                    s += "    " + line + "\n"
+                                    s += "    " + line + "  \n"
                             else:
                                 s += f"{q}\n"
                         yield StreamingResponseChunk(type="query", content=s)
                     case PipelineStatus.RETRIEVAL_UPDATE:
-                        s = "Retrieving information...\n"
+                        s = "Retrieving information...  \n"
                         step: RetrievalStep = update.retrieval_step
                         if step is None or len(step.results) == 0:
                             yield StreamingResponseChunk(type="retrieval", content="No results found.\n")
@@ -157,9 +157,9 @@ class DMAWebUI:
                             s += f"- "
                             # add indent to all lines except first
                             r_lines = result.content.split("\n")
-                            s += r_lines[0] + "\n"
+                            s += r_lines[0] + "  \n"
                             for line in r_lines[1:]:
-                                s += "    " + line + "\n"
+                                s += "    " + line + "  \n"
                         yield StreamingResponseChunk(type="retrieval", content=s)
                     case _:
                         # for other statuses, we don't yield anything for now
@@ -222,6 +222,8 @@ class DMAWebUI:
 
             for chunk in self._handle_pipeline_response(response):
                 yield chunk
+                
+            self.conversation.add_message(response)
 
 
         except Exception as e:
