@@ -26,9 +26,13 @@ class ChatMessage(BaseModel):
 # Model for the user's chat request
 class ChatRequest(BaseModel):
     message: str
+    user_token: str | None = None
     
     def to_message(self) -> Message:
         return Message(role=Role.USER, content=self.message)
+    
+class HistoryRequest(BaseModel):
+    user_token: str | None = None
     
 class StreamingResponseChunk(BaseModel):
     type: str # "THOUGHT" | "RESPONSE" | "QUERY" | "RETRIEVAL" | "ERROR"
@@ -46,7 +50,7 @@ class DMAWebUI:
         print("Loading pipeline...")
         self.pipeline = Pipeline()
         print("Pipeline loaded.")
-        self.conversation = Conversation()
+        self._conversations = {}
         self._generating_response = False
         
         app = FastAPI()
@@ -65,17 +69,25 @@ class DMAWebUI:
 
         # --- Connect API Endpoints ---
 
-        self.app.get("/api/history", response_model=list[ChatMessage])(self.get_history)
+        self.app.post("/api/history", response_model=list[ChatMessage])(self.get_history)
         self.app.post("/api/chat")(self.chat)
         self.app.get("/", response_class=FileResponse)(self.get_index)
+        
+    def get_conversation(self, user_token: str) -> Conversation:
+        """
+        Get the conversation for a given user token.
+        """
+        if user_token not in self._conversations:
+            self._conversations[user_token] = Conversation()
+        return self._conversations[user_token]
 
-    async def get_history(self):
+    async def get_history(self, request: HistoryRequest) -> list[ChatMessage]:
         """
         Returns the chat history as a list of ChatMessage objects.
         """
         
         return [
-            ChatMessage.from_message(msg) for msg in self.conversation.messages if msg.role in [Role.USER, Role.ASSISTANT] and msg.message_text
+            ChatMessage.from_message(msg) for msg in self.get_conversation(request.user_token).messages if msg.role in [Role.USER, Role.ASSISTANT] and msg.message_text
         ]
 
             
@@ -206,12 +218,13 @@ class DMAWebUI:
         self._generating_response = True
         try:
             # create a new queue for updates
+            conversation = self.get_conversation(chat_request.user_token)
             queue = asyncio.Queue()
-            self.conversation.add_message(chat_request.to_message())
-            
+            conversation.add_message(chat_request.to_message())
+
             # run generate in executor to avoid blocking
             loop = asyncio.get_event_loop()
-            main_future = loop.run_in_executor(None, self.pipeline.generate, self.conversation, lambda update: queue.put_nowait(update))
+            main_future = loop.run_in_executor(None, self.pipeline.generate, conversation, lambda update: queue.put_nowait(update))
             main_task = asyncio.ensure_future(main_future)
             
             async for update in self._handle_pipeline_updates(queue):
@@ -223,7 +236,7 @@ class DMAWebUI:
             for chunk in self._handle_pipeline_response(response):
                 yield chunk
                 
-            self.conversation.add_message(response)
+            conversation.add_message(response)
 
 
         except Exception as e:
@@ -256,10 +269,18 @@ class DMAWebUI:
             json_bytes = (json.dumps(chunk.model_dump(mode="json")) + "\n").encode("utf-8")
             yield json_bytes
 
-    async def chat(self,request: ChatRequest):
+    async def chat(self, request: ChatRequest):
         """
         Receives a user message and returns a streaming response.
         """
+        
+        # output ip and request message to console
+        print(f"Received chat request: {request.message}")
+        print(f"User token: {request.user_token}")
+        
+        if not request.user_token or len(request.user_token.strip()) < 5:
+            return "{\"type\": \"error\", \"content\": \"Error: Invalid user token.\"}"
+
         return StreamingResponse(
             self.chunks_to_json_stream(self.generate_response(request)),
             media_type="application/json"

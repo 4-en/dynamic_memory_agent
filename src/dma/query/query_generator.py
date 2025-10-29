@@ -100,6 +100,8 @@ class QueryGenerator:
             logging.error("Failed to generate queries after multiple attempts.")
             retrieval.done = True
             retrieval.satisfactory = False
+            # add empty step to indicate failure
+            retrieval.add_step(RetrievalStep(queries=[], results=[]))
         
         return retrieval
     
@@ -337,7 +339,7 @@ class QueryGenerator:
             reasoning, queries, clarification_needed = self._parse_reasoning_and_json(response)
         except ValueError as e:
             # If parsing fails, return the retrieval unchanged
-            raise Exception(f"Failed to parse query generator response: {e}")
+            raise Exception(f"Failed to parse query generator response: {e}\nResponse content: {response.message_text}")
         
         new_step.reasoning = reasoning
         new_step.clarification_needed = clarification_needed

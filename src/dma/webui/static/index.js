@@ -31,6 +31,17 @@ function addMessage(role, type, content) {
     return messageElement;
 }
 
+function get_token() {
+    // returns a random unique token that is used to identify a user session
+    // store in local storage and create if not exists
+    let token = localStorage.getItem('user_token');
+    if (!token) {
+        token = crypto.randomUUID();
+        localStorage.setItem('user_token', token);
+    }
+    return token;
+}
+
 // --- Event 1: Load History on Page Load ---
 window.addEventListener('load', async () => {
     if (!converter) {
@@ -38,7 +49,11 @@ window.addEventListener('load', async () => {
         await new Promise(resolve => setTimeout(resolve, 100));
     }
     try {
-        const response = await fetch('/api/history');
+        const response = await fetch('/api/history', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ user_token: get_token() }),
+        });
         if (!response.ok) throw new Error('Failed to fetch history');
         const history = await response.json();
         history.forEach(msg => {
@@ -46,6 +61,7 @@ window.addEventListener('load', async () => {
             if (converter) {
                 const htmlContent = converter.makeHtml(msg.content);
                 el.innerHTML = htmlContent;
+                MathJax.typesetPromise([el]).catch((err) => console.error('MathJax typeset failed: ', err));
             }
         });
     } catch (error) {
@@ -76,7 +92,7 @@ chatForm.addEventListener('submit', async (event) => {
         const response = await fetch('/api/chat', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ message: message }),
+            body: JSON.stringify({ message: message, user_token: get_token() }),
         });
 
         if (!response.ok) throw new Error('Network response was not ok');
@@ -146,6 +162,7 @@ chatForm.addEventListener('submit', async (event) => {
                         // Convert markdown to HTML
                         const htmlContent = converter.makeHtml(currentResponseRaw);
                         responseElement.innerHTML = htmlContent;
+                        MathJax.typesetPromise([responseElement]).catch((err) => console.error('MathJax typeset failed: ', err));
                     } else {
                         responseElement.textContent = currentResponseRaw;
                     }
@@ -163,6 +180,7 @@ chatForm.addEventListener('submit', async (event) => {
                         // Convert markdown to HTML
                         const htmlContent = converter.makeHtml(currentResponseRaw);
                         responseElement.innerHTML = htmlContent;
+                        MathJax.typesetPromise([responseElement]).catch((err) => console.error('MathJax typeset failed: ', err));
                     }
 
                     currentType = chunk.type;
