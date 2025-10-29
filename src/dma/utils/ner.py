@@ -3,7 +3,7 @@
 import spacy
 
 class NER:
-    _nlp = spacy.load("en_core_web_sm")
+    _nlp = spacy.load("en_core_web_lg")
 
     @staticmethod
     def get_nlp() -> spacy.language.Language:
@@ -54,6 +54,13 @@ class NER:
         doc = NER._nlp(text)
         allowed_entities = {"PERSON", "ORG", "GPE", "NORP", "FAC", "LOC", "PRODUCT", "EVENT", "WORK_OF_ART", "LAW", "LANGUAGE"}
         entities = [ent.text for ent in doc.ents if ent.label_ in allowed_entities]
+        
+        # Do a second pass using .title() to catch any missed entities
+        title_text = text.title()
+        title_doc = NER._nlp(title_text)
+        for ent in title_doc.ents:
+            if ent.label_ in allowed_entities:
+                entities.append(ent.text)
         
         # normalize entities
         entities = [NER.normalize_entity(ent) for ent in entities]

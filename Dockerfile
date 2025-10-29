@@ -49,7 +49,7 @@ RUN python3 -m pip install . --no-cache-dir --timeout 600 --break-system-package
 #COPY --from=builder-cuda /usr/local/lib/python*/dist-packages/ /usr/local/lib/python*/dist-packages/
 #COPY --from=builder-cuda /usr/local/lib/python*/site-packages/ /usr/local/lib/python*/site-packages/
 #COPY --from=builder-cuda ${APP_HOME} ${APP_HOME}
-RUN python3 -m spacy download en_core_web_sm --break-system-packages
+RUN python3 -m spacy download en_core_web_lg --break-system-packages
 CMD ["python3", "-m", "dma"]
 
 ########## CPU PATH ##########
@@ -83,5 +83,5 @@ RUN python3 -m pip install . --no-cache-dir --timeout 600 --break-system-package
 
 
 #RUN python3 -m pip install spacy --no-cache-dir --break-system-packages && python3 -m spacy download en_core_web_sm --break-system-packages
-RUN python3 -m spacy download en_core_web_sm --break-system-packages
+RUN python3 -m spacy download en_core_web_lg --break-system-packages
 CMD ["python3", "-m", "dma"]

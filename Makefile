@@ -98,7 +98,7 @@ venv:
 	@echo "Installing package with CUDA support..."
 	. .venv/bin/activate && CMAKE_ARGS="-DGGML_CUDA=ON" python -m pip install -e .[test] --no-cache-dir
 	@echo "Downloading spaCy model..."
-	. .venv/bin/activate && python -m spacy download en_core_web_sm
+	. .venv/bin/activate && python -m spacy download en_core_web_lg
 	@echo "Virtual environment setup complete!"
 
 
