@@ -1,4 +1,5 @@
 import asyncio
+from typing import AsyncGenerator, Generator
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
@@ -9,6 +10,7 @@ import pathlib
 from dma.pipeline import Pipeline, PipelineUpdate, PipelineStatus
 from dma.core import Conversation, Message, Role, RetrievalStep, RetrievalQuery
 import logging
+import json
 
 logging.basicConfig(level=logging.DEBUG)
 
@@ -27,6 +29,11 @@ class ChatRequest(BaseModel):
     
     def to_message(self) -> Message:
         return Message(role=Role.USER, content=self.message)
+    
+class StreamingResponseChunk(BaseModel):
+    type: str # "THOUGHT" | "RESPONSE" | "QUERY" | "RETRIEVAL" | "ERROR"
+    content: str
+    status: str | None = None
 
 class DMAWebUI:
     def __init__(self):
@@ -71,37 +78,6 @@ class DMAWebUI:
             ChatMessage.from_message(msg) for msg in self.conversation.messages if msg.role in [Role.USER, Role.ASSISTANT] and msg.message_text
         ]
 
-    async def dummy_llm_responder(self, user_message: str):
-        """
-        This is your placeholder for the actual LLM logic.
-        It now simulates sending "thought" messages before the final response.
-        The protocol is:
-        - [THOUGHT]Some thought...\n
-        - [RESPONSE]The final streamed response...
-        """
-        # 1. Simulate thought process (memory retrieval, planning etc.)
-        t1 = "[THOUGHT]The user is asking for a streaming protocol demo. I should first show some debug/memory output as a 'thought'.\n"
-        t2 = f"[THOUGHT]User's message was: '{user_message}'. I'll formulate a response that acknowledges this.\n"
-        
-        t1t2 = t1 + t2
-        # split after each whitespace to simulate streaming
-        for chunk in t1t2.split(' '):
-            yield chunk + ' '
-            await asyncio.sleep(0.05) # Simulate network/compute delay
-
-        # 2. Signal the start of the final answer
-        yield "[RESPONSE]"
-
-        # 3. Stream the final answer
-        response_chunks = [
-            "Okay, ", "this ", "is ", "the ", "final, ", "streamed ", "response. ",
-            "As ", "you ", "can ", "see, ", "my ", "'thoughts' ", "were ",
-            "displayed ", "first ", "in ", "a ", "different ", "style."
-        ]
-
-        for chunk in response_chunks:
-            yield chunk
-            await asyncio.sleep(0.05) # Simulate network/compute delay
             
     def convert_pipeline_update(self, update: PipelineUpdate)->str:
         """
@@ -110,7 +86,7 @@ class DMAWebUI:
         """
         return ""
     
-    async def _handle_pipeline_updates(self, queue: asyncio.Queue):
+    async def _handle_pipeline_updates(self, queue: asyncio.Queue)->AsyncGenerator[StreamingResponseChunk, None]:
         """
         Asynchronously consumes updates from the queue, sends them to a server,
         and stops once the main_task completes.
@@ -132,32 +108,32 @@ class DMAWebUI:
                     
                 match update.status:
                     case PipelineStatus.QUERY_UPDATE:
-                        s = "[QUERY]Querying database...\n"
+                        s = "Querying database...\n"
                         step: RetrievalStep = update.retrieval_step
                         if step is None or len(step.queries) == 0:
                             continue
                         for query in step.queries:
                             s += f" - {query.embedding_query.query_text}\n"
-                        yield s
+                        yield StreamingResponseChunk(type="query", content=s)
                     case PipelineStatus.RETRIEVAL_UPDATE:
-                        s = "[RETRIEVAL]Retrieving information...\n"
+                        s = "Retrieving information...\n"
                         step: RetrievalStep = update.retrieval_step
                         if step is None or len(step.results) == 0:
-                            yield "[RETRIEVAL]No results found.\n"
+                            yield StreamingResponseChunk(type="retrieval", content="No results found.\n")
                             continue
                         for result in step.results:
                             s += f" - {result.memory.memory}\n"
-                        yield s
+                        yield StreamingResponseChunk(type="retrieval", content=s)
                     case _:
                         # for other statuses, we don't yield anything for now
                         continue
             except Exception as e:
-                yield f"[ERROR]An error occurred while processing pipeline updates: {str(e)}"
+                yield StreamingResponseChunk(type="error", content=f"An error occurred while processing pipeline updates: {str(e)}")
                 completed = True
         
                         
         
-    def _handle_pipeline_response(self, response:Message)->str:
+    def _handle_pipeline_response(self, response:Message)->Generator[StreamingResponseChunk, None, None]:
         """
         Process the final response from the pipeline.
         Currently a placeholder for future implementation.
@@ -165,29 +141,29 @@ class DMAWebUI:
         if response is None:
             return "Error: No response generated."
         
-        full_text = ""
+
         thought_text = response.reasoning_text or ""
-        if thought_text:
-            full_text += f"[THOUGHT]{thought_text}\n"
         content = response.message_text or ""
-        if content:
-            full_text += f"[RESPONSE]{content}\n"
-            self.conversation.add_message(response)
-        else:
-            return "Error: Empty response."
-        
+        if not content:
+            yield StreamingResponseChunk(type="error", content="Error: Empty response.")
+            return
+        if thought_text:
+            yield StreamingResponseChunk(type="thought", content=thought_text)
+        yield StreamingResponseChunk(type="response", content=content)
+
         # add metadata info if available
         if response.source_ids:
-            full_text += "\n**Sources:**\n"
-            full_text += "\n".join(f" - {source_id}" for source_id in response.source_ids)
+            sources = "\n**Sources:**\n"
+            sources += "\n".join(f" - {source_id}" for source_id in response.source_ids)
+            yield StreamingResponseChunk(type="response", content=sources)
 
-        return full_text
+        return
             
-    async def generate_response(self, chat_request: ChatRequest):
+    async def generate_response(self, chat_request: ChatRequest) -> AsyncGenerator[StreamingResponseChunk, None]:
         # for nowm only allow one response at a time
         # we can handle this better later
         if self._generating_response:
-            yield "Error: Already generating a response. Please wait."
+            yield StreamingResponseChunk(type="error", content="Error: Already generating a response. Please wait.")
             return
         
         self._generating_response = True
@@ -202,38 +178,51 @@ class DMAWebUI:
             main_task = asyncio.ensure_future(main_future)
             
             async for update in self._handle_pipeline_updates(queue):
-                print(update)
                 yield update
                 
             response = await main_task
 
 
-            yield self._handle_pipeline_response(response)
+            for chunk in self._handle_pipeline_response(response):
+                yield chunk
 
 
         except Exception as e:
-            yield f"[ERROR]An error occurred during response generation: {str(e)}"
+            yield StreamingResponseChunk(type="error", content=f"An error occurred during response generation: {str(e)}")
 
         finally:
             self._generating_response = False
             
 
-    async def yield_word_by_word_wrapper(self, inner_generator, word_delay=0.1):
+    async def yield_word_by_word_wrapper(self, inner_generator, word_delay=0.01)->AsyncGenerator[StreamingResponseChunk, None]:
         """
         Wraps an async generator to yield its output word by word with a delay.
         """
-        async for text in inner_generator:
-            for chunk in text.split(' '):
-                yield chunk + ' '
+        async for chunk in inner_generator:
+            content = chunk.content
+            if not content:
+                yield chunk
+                continue
+            words = content.split(" ")
+            for word in words:
+                yield StreamingResponseChunk(type=chunk.type, content=word + " ")
                 await asyncio.sleep(word_delay)
+                
+    async def chunks_to_json_stream(self, chunk_generator: AsyncGenerator[StreamingResponseChunk, None]) -> AsyncGenerator[bytes, None]:
+        """
+        Converts StreamingResponseChunk objects to JSON bytes for streaming.
+        """
+        async for chunk in chunk_generator:
+            json_bytes = (json.dumps(chunk.dict()) + "\n").encode("utf-8")
+            yield json_bytes
 
     async def chat(self,request: ChatRequest):
         """
         Receives a user message and returns a streaming response.
         """
         return StreamingResponse(
-            self.yield_word_by_word_wrapper(self.generate_response(request), word_delay=0.05),
-            media_type="text/plain"
+            self.chunks_to_json_stream(self.yield_word_by_word_wrapper(self.generate_response(request))),
+            media_type="application/json"
         )
 
     # --- Static File Serving ---
