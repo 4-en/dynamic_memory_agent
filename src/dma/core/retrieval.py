@@ -344,6 +344,10 @@ class Retrieval:
         self.final_summary = "\n".join(summaries)
         
         if self.final_summary == "":
+            
+            # TODO: if we have queries but no results, we should indicate that
+            # we shouldn't make guesses and instead say we have no information
+            
             self.final_summary = "Okay, this is what I know:\n"
             memory_summary = ""
             for step in self.steps:
