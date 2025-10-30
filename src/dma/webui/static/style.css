@@ -195,6 +195,19 @@ html:not(.dark-mode) .icon-sun {
     max-width: 70%;
 }
 
+.assistant-message.status-message {
+    text-align: center;
+    font-size: 0.9em;
+    color: var(--info-text-color);
+    font-style: italic;
+    background-color: transparent;
+    border: 1px solid var(--info-text-color);
+    padding: 8px 12px;
+    border-radius: 10px;
+    max-width: 60%;
+    align-self: center;
+}
+
 .info-message {
     text-align: center;
     font-size: 0.9em;

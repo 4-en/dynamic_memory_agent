@@ -105,6 +105,8 @@ chatForm.addEventListener('submit', async (event) => {
         let responseElement = null;
         let currentResponseRaw = null;
 
+        const statusMessage = addMessage('assistant', 'status', 'Thinking...');
+
 
         let not_done = true;
         while (not_done) {
@@ -152,6 +154,15 @@ chatForm.addEventListener('submit', async (event) => {
                     continue; // Skip this malformed chunk
                 }
 
+                if (chunk.status) {
+                    // handle status updates
+                    statusMessage.textContent = chunk.status;
+                }
+
+                if (!chunk.content || chunk.content.length === 0) {
+                    continue; // skip if no content
+                }
+
                 // (Your existing logic for appending the message)
                 if (currentType !== null && responseElement !== null && chunk.type === currentType) {
                     // append to existing message
@@ -190,6 +201,9 @@ chatForm.addEventListener('submit', async (event) => {
 
             } // --- END OF INNER processing LOOP ---
         } // --- END OF OUTER not_done LOOP ---
+
+        // remove status message
+        statusMessage.remove();
 
     } catch (error) {
         console.error('Error during chat:', error);

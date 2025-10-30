@@ -35,8 +35,8 @@ class HistoryRequest(BaseModel):
     user_token: str | None = None
     
 class StreamingResponseChunk(BaseModel):
-    type: str # "THOUGHT" | "RESPONSE" | "QUERY" | "RETRIEVAL" | "ERROR"
-    content: str
+    type: str # "query" | "retrieval" | "thought" | "response" | "error" | "status"
+    content: str | None = None
     status: str | None = None
 
 class DMAWebUI:
@@ -174,7 +174,9 @@ class DMAWebUI:
                                 s += "    " + line + "  \n"
                         yield StreamingResponseChunk(type="retrieval", content=s)
                     case _:
-                        # for other statuses, we don't yield anything for now
+                        # for other statuses, just send status if message is present
+                        if update.message:
+                            yield StreamingResponseChunk(type="status", content=None, status=update.message)
                         continue
             except Exception as e:
                 yield StreamingResponseChunk(type="error", content=f"An error occurred while processing pipeline updates: {str(e)}")
