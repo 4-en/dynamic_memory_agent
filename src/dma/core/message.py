@@ -200,8 +200,8 @@ class Message:
     # The message id.
     id: str = None
     
-    # entities mentioned in the message
-    entities: list[str] = field(default_factory=list)
+    # entities mentioned in the message, with count of mentions
+    entities: dict[str, int] = field(default_factory=dict)
     
     # source ids used in retrieval (for assistant messages)
     source_ids: list[str] = field(default_factory=list)

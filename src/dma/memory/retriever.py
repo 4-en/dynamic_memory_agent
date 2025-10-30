@@ -1,8 +1,9 @@
 from dma.core import RetrievalStep, EntityQuery, EmbeddingQuery, RetrievalQuery, Retrieval
-from dma.core import Conversation, Message
-from dma.core import Memory, MemoryResult
+from dma.core import Conversation, Message, Role
+from dma.core import Memory, MemoryResult, FeedbackType
 
 from .graph import Neo4jMemory, GraphMemory
+import math
 
 from dma.config.dma_config import get_config
 
@@ -66,11 +67,13 @@ class Retriever:
         """
         return self.graph_memory.add_memory_series(memories)
     
-    def retrieve(self, query: RetrievalStep, top_k: int = 5) -> list[MemoryResult]:
+    def retrieve(self, conversation: Conversation, query: RetrievalStep, top_k: int = 5) -> list[MemoryResult]:
         """Retrieve relevant memories based on the provided query.
         
         Parameters
         ----------
+        conversation : Conversation
+            The current conversation context.
         query : RetrievalStep
             The retrieval step containing the queries.
         top_k : int
@@ -81,4 +84,70 @@ class Retriever:
         list[Memory]
             A list of retrieved memories.
         """
-        return []  # not implemented yet
+        
+        # 1. create list of entities in previous assistant messages, with count and recency
+        entity_scales = self._calculate_entity_scores(conversation)
+        
+        # 2. query and collect results
+        
+        # 3. rerank results based on entity scales and other factors
+        
+        # 4. expand query based on results and re-query if needed
+        
+        
+        
+        return [] 
+
+    def _calculate_entity_scores(self, conversation):
+        assistant_entities = {}
+        age = 1
+        MAX_AGE = 20
+        for msg in enumerate(reversed(conversation.messages)):
+            if msg.role != Role.ASSISTANT:
+                continue
+            for entity, count in msg.entities.items():
+                if not entity in assistant_entities:
+                    assistant_entities[entity] = {'count': 0, 'age': age}
+                assistant_entities[entity]['count'] += count
+            age += 1
+            if age > MAX_AGE:
+                break
+            
+        # calculate scaling factors between 0 and 1, based on count and age
+        # basically, more recent and more mentioned entities should reduce the weight more
+        # LOWEST_SCALE = 0.3 # basically what we want to get for very common/recent entities
+        # HIGHEST_SCALE = 1.0 # for entities not mentioned before
+        # something with age 10 and count 1 should be around 0.8
+        def scale_formula(count, age):
+            age_factor = 1 - math.exp(-age / 5) # decays with age
+            # scale up with count, but with diminishing returns
+            #scale = (age_factor / math.exp(1-(1/count))) * (1-age_factor**5) + age_factor**6
+            scale = age_factor - age_factor / 15 * math.min(count-1, 10) * (1 - age_factor**4)
+            return scale
+        
+        scales = {}
+        for entity in assistant_entities:
+            data = assistant_entities[entity]
+            scales[entity] = scale_formula(data['count'], data['age'])
+
+        return scales
+
+    
+    def give_memory_feedback(self, memory_ids: list[str], feedback: FeedbackType) -> bool:
+        """Provide feedback on specific memories.
+        Positive feedback can be used to reinforce the relevance of certain memories,
+        and links them together, while negative feedback can be used to de-prioritize certain memories.
+        
+        Parameters
+        ----------
+        memory_ids : list[str]
+            The list of memory IDs to provide feedback on.
+        feedback : FeedbackType
+            The type of feedback to provide.
+        
+        Returns
+        -------
+        bool
+            True if the feedback was processed successfully, False otherwise.
+        """
+        return False  # not implemented yet

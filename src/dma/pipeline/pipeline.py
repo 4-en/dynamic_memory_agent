@@ -349,7 +349,7 @@ class Pipeline:
                     retrieval_step=pre_step
                 )
 
-                results = self.retriever.retrieve(pre_step, top_k=self.config.retrieval_num_results)
+                results = self.retriever.retrieve(conversation,pre_step, top_k=self.config.retrieval_num_results)
                 pre_step.results.extend(results)
                 
                 current_step += 1
@@ -533,7 +533,7 @@ class Pipeline:
                 retrieval.done = True
                 return
 
-            results: list[MemoryResult] = self.retriever.retrieve(last_step, top_k=self.config.retrieval_num_results)
+            results: list[MemoryResult] = self.retriever.retrieve(conversation, last_step, top_k=self.config.retrieval_num_results)
             # TODO: what to do if no results found?
             # for now, we just add an empty result and mark as done
             # alternatives:
