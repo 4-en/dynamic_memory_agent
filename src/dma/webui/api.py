@@ -242,6 +242,9 @@ class DMAWebUI:
 
 
         except Exception as e:
+            # print stack trace
+            import traceback
+            traceback.print_exc()
             yield StreamingResponseChunk(type="error", content=f"An error occurred during response generation: {str(e)}")
 
         finally:

@@ -1,8 +1,9 @@
 from dma.core import RetrievalStep, EntityQuery, EmbeddingQuery, RetrievalQuery, Retrieval
 from dma.core import Conversation, Message, Role
 from dma.core import Memory, MemoryResult, FeedbackType
+from dma.utils import cosine_similarity
 
-from .graph import Neo4jMemory, GraphMemory
+from .graph import Neo4jMemory, GraphMemory, GraphResult
 import math
 
 from dma.config.dma_config import get_config
@@ -88,21 +89,143 @@ class Retriever:
         # 1. create list of entities in previous assistant messages, with count and recency
         entity_scales = self._calculate_entity_scores(conversation)
         
+        entities, embeddings = self._collect_queries(query)
+        # apply entity scales
+        for entity in entities:
+            if entity in entity_scales:
+                entities[entity] = entities[entity] * entity_scales[entity]
+               
         # 2. query and collect results
+        TOP_K_ENTITIES = 10
+        # limit to top k entities
+        sorted_entities = sorted(entities.items(), key=lambda item: item[1], reverse=True)[:TOP_K_ENTITIES]
+        sorted_entities = [entity for entity, _ in sorted_entities]
         
+        TOP_K_QUERY_RESULTS = 10
+        embedding_results = [self.graph_memory.query_memories_by_vector(embedding, top_k=TOP_K_QUERY_RESULTS) for embedding in embeddings]
+        entity_results = self.graph_memory.query_memories_by_entities(sorted_entities, limit=TOP_K_QUERY_RESULTS)
+        all_memory_results = {}
+        for entity_list in entity_results.values():
+            for graph_result in entity_list:
+                all_memory_results[graph_result.id] = graph_result.memory
+        for embed_list in embedding_results:
+            for graph_result in embed_list:
+                all_memory_results[graph_result.id] = graph_result.memory
+
+        # to list
+        all_memory_results = list(all_memory_results.values())
+            
+                
         # 3. rerank results based on entity scales and other factors
+        # make sure to prioritize embedding results if present
+        ranked_results = self._rank_memories(all_memory_results, entities, embeddings)
         
-        # 4. expand query based on results and re-query if needed
+        if False:
+            # todo: under some conditions, we may want to expand the query and re-query
+            # e.g., if we have few results, or if the results are low quality
+            
+            # 4. expand query based on results and re-query if needed
+            # possibilities: 
+            # - get related entities from graph (calculated using co-mentions)
+            # - get related memories (using graph links)
+            # rerank based on:
+            # - original_memory_score * distance_scale
+            # - original_entity_score * entity_similarity_scale
+            # - time decay if applicable
+            pass
+        
+        if top_k is not None and len(ranked_results) > top_k:
+            ranked_results = ranked_results[:top_k]
+            
+        return [res.memory for res in ranked_results]
+
         
         
+
+    
+    def _rank_memories(self, memories: list[Memory], entities: dict[str, int], embeddings: list[list[float]]) -> list[GraphResult]:
+        # step by step pick best memories based on:
+        # 1. embedding similarity (if embeddings are present)
+        # 2. entity matches (weighted by entity weights)
+        # 3. even distribution of memories (avoid too many from same source/time)
         
-        return [] 
+        # iteratively pick best memory until list is empty
+        ranked_memories = []
+        memory_pool = memories.copy()
+        similarity_cache = {}
+        EMBEDDING_MULTIPLIER = 2.0 + len(entities) / 2.0  # weight embeddings more if there are few entity matches
+        EMBEDDING_MIN_SIMILARITY = 0.6
+        FALLOFF_RATE = 0.5
+        calc_falloff = lambda n: FALLOFF_RATE ** n - 1
+        entity_counts = {entity: 0 for entity in entities} # n of times entity has been used in ranked memories
+        embedding_sum = [0 for _ in embeddings] # sum of similarities in ranked memories
+        while len(memory_pool) > 0:
+            best_memory = None
+            best_score = -1
+            for memory in memory_pool:
+                score = 0.0
+                # embedding similarity
+                if len(embeddings) > 0 and memory.embedding is not None:
+                    for i, query_embedding in enumerate(embeddings):
+                        key = f"{memory.id}_{i}"
+                        if key in similarity_cache:
+                            similarity = similarity_cache[key]
+                        else:
+                            similarity = cosine_similarity(memory.embedding, query_embedding)
+                            similarity_cache[key] = similarity
+                        if similarity >= EMBEDDING_MIN_SIMILARITY:
+                            # apply falloff based on how many times we've used this embedding
+                            falloff = calc_falloff(embedding_sum[i])
+                            score += similarity * EMBEDDING_MULTIPLIER * falloff
+                        
+                        
+                # entity matches
+                for entity in entities:
+                    if entity in memory.entities:
+                        # apply falloff based on how many times we've used this entity
+                        falloff = calc_falloff(entity_counts[entity])
+                        score += entities[entity] * falloff
+                
+                if score > best_score:
+                    best_score = score
+                    best_memory = memory
+            if best_memory is None:
+                break
+            ranked_memories.append(GraphResult(memory=best_memory, score=best_score))
+            memory_pool.remove(best_memory)
+            # update entity counts
+            for entity in entities:
+                if entity in best_memory.entities:
+                    entity_counts[entity] += 1
+                    
+            if best_memory.embedding is not None:
+                for i, query_embedding in enumerate(embeddings):
+                    similarity = similarity_cache[f"{best_memory.id}_{i}"]
+                    if similarity >= EMBEDDING_MIN_SIMILARITY:
+                        embedding_sum[i] += similarity
+                        
+        return ranked_memories
+        
+    
+    def _collect_queries(self, query: RetrievalStep)-> tuple[dict[str, int], list[list[float]]]:
+        entities = {}
+        embeddings = []
+        for q in query.queries:
+            if q.embedding_query:
+                embeddings.append(q.embedding_query)
+            if q.entity_queries:
+                for entity_query in q.entity_queries:
+                    if not entity_query.entity in entities:
+                        entities[entity_query.entity] = 0
+                    entities[entity_query.entity] += entity_query.weight
+                    
+        return entities, embeddings
 
     def _calculate_entity_scores(self, conversation):
         assistant_entities = {}
         age = 1
         MAX_AGE = 20
-        for msg in enumerate(reversed(conversation.messages)):
+        for msg in reversed(conversation.messages):
             if msg.role != Role.ASSISTANT:
                 continue
             for entity, count in msg.entities.items():
