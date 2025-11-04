@@ -202,6 +202,7 @@ class Memory:
     truthfulness: float = 1.0 # The estimated truthfulness of the memory, 1.0 is probably completely true, 0.0 is probably completely false
     memory_time_point: float = -1 # The time the memory is about (not the time the memory was created)
     source: Source = None # The source of the memory
+    references: list[Source] = field(default_factory=list) # References to other sources related to this memory
     embedding: np.ndarray = None # The embedding of the memory
     creation_time: float = field(default_factory=time_ms) # The time the memory was created
     last_access: float = field(default_factory=time_ms) # The last time this memory was accessed

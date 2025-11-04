@@ -3,3 +3,4 @@ from .conversation import Conversation
 from .memory import Memory, TimeRelevance, FeedbackType
 from .sources import Source, SourceType
 from .retrieval import RetrievalStep, EntityQuery, EmbeddingQuery, RetrievalQuery, Retrieval, MemoryResult
+from .web_source import WebSourceData
