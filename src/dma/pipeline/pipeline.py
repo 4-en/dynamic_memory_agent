@@ -80,7 +80,12 @@ class Pipeline:
         # placeholders for components
         self.generator = LowLevelLlamaCppGenerator()
         self.query_generator = QueryGenerator(self.generator)
-        self.retriever = Retriever()
+        try:
+            self.retriever = Retriever()
+        except Exception as e:
+            logging.warning(f"Could not load default retriever: {e}. Retriever is not set. Proceeding without retriever.")
+            self.retriever = None
+
         self.config = get_config()
         
         
