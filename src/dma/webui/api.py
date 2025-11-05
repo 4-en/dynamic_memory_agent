@@ -295,7 +295,7 @@ class DMAWebUI:
     async def get_index(self):
         return FileResponse(self.static_dir / "index.html", media_type="text/html")
 
-def launch_webui():
+def launch_webui(host: str = "0.0.0.0", port: int = 8000):
     """
     Launch the FastAPI web UI for the Dynamic Memory Agent.
     """
@@ -303,7 +303,7 @@ def launch_webui():
     logging.basicConfig(level=logging.DEBUG)
     app_instance = DMAWebUI()
     app = app_instance.app
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    uvicorn.run(app, host=host, port=port)
 
 # --- Run the App ---
 if __name__ == "__main__":
