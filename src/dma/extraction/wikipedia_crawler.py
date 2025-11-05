@@ -376,6 +376,13 @@ class WikipediaCrawler:
         
         if isinstance(top_n_setting, str) and top_n_setting.upper() == "EQUAL":
             top_n = core_page_count
+        elif isinstance(top_n_setting, str) and top_n_setting.startswith("x"):
+            try:
+                multiplier = float(top_n_setting[1:])
+                top_n = int(core_page_count * multiplier)
+            except ValueError:
+                print(f"[WARN] Invalid expansion_top_n_links format: {top_n_setting}. Skipping link expansion.", file=sys.stderr)
+                top_n = core_page_count
         elif isinstance(top_n_setting, int):
             top_n = top_n_setting
         
@@ -532,7 +539,9 @@ class WikipediaCrawler:
         max_depth : int, optional
             How deep to crawl into subcategories (default is 2).
         expansion_top_n_links : int or str, optional
-            How many top-linked pages to add during expansion (default is "EQUAL").
+            How many top-linked pages to add during expansion.
+            Int for fixed number, x# for multiple of core pages, or "EQUAL"
+            to match the number of core pages (default is "EQUAL").
         expansion_top_n_categories : int, optional
             How many top "outlier" categories to crawl for expansion (default is 20).
 
