@@ -58,22 +58,13 @@ def launch_build_memory(args):
     """Launches the memory builder with given arguments."""
     print(f"Building memory of type: {args.type}")
     
-    # Example of validating arguments within the function
-    if args.type in ["wikipedia", "mediawiki"]:
-        if not args.category:
-            print("Error: --category is required for 'wikipedia' or 'mediawiki' type.", file=sys.stderr)
-            sys.exit(1)
-        print(f"Using root category: {args.category}")
+    # only wikipedia type is implemented for now
+    if args.type != "wikipedia":
+        print(f"Memory type '{args.type}' is not yet implemented.")
+        return
     
-    elif args.type == "directory":
-        if not args.path:
-            print("Error: --path is required for 'directory' type.", file=sys.stderr)
-            sys.exit(1)
-        print(f"Using directory path: {args.path}")
-    
-    # ---
-    # Add your memory building logic here
-    # ---
+    from dma.extraction import build_memory_of_type
+    build_memory_of_type(memory_type=args.type, category=args.category, remove_existing=args.remove_existing)
 
 def create_parser():
     """Creates the main argument parser with subparsers for each mode."""
@@ -124,7 +115,7 @@ def create_parser():
         required=True,
         help="Type of memory to build"
     )
-    build_parser.add_argument("--category", type=str, help="Root category for Wikipedia/MediaWiki crawl (required for this type)")
+    build_parser.add_argument("--category", type=str, help="Root category for Wikipedia/MediaWiki crawl (required for this type). Separate multiple categories with commas.")
     build_parser.add_argument("--path", type=str, help="Path for directory memory (required for this type)")
     build_parser.add_argument("-rm", "--remove-existing", action="store_true", help="Remove existing memory before building new one")
     build_parser.set_defaults(func=launch_build_memory)

@@ -1,2 +1,3 @@
 from .wikipedia_crawler import WikipediaCrawler
 from .memory_converter import MemoryConverter, BasicMemoryConverter, ArticleSplitStrategy
+from .memory_builder import build_memory_of_type
