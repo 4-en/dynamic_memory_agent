@@ -50,10 +50,9 @@ def launch_web(args):
 
 def launch_cli(args):
     """Launches the CLI with given arguments."""
-    print(f"Starting CLI with config: {args.config}")
-    # ---
-    # Add your CLI startup logic here
-    # ---
+    # print(f"Starting CLI with config: {args.config}")
+    from .cli import main as launch_cli_main
+    launch_cli_main()
 
 def launch_build_memory(args):
     """Launches the memory builder with given arguments."""
@@ -127,6 +126,7 @@ def create_parser():
     )
     build_parser.add_argument("--category", type=str, help="Root category for Wikipedia/MediaWiki crawl (required for this type)")
     build_parser.add_argument("--path", type=str, help="Path for directory memory (required for this type)")
+    build_parser.add_argument("-rm", "--remove-existing", action="store_true", help="Remove existing memory before building new one")
     build_parser.set_defaults(func=launch_build_memory)
     
     return parser
