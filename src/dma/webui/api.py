@@ -168,7 +168,7 @@ class DMAWebUI:
                         for result in step.results:
                             s += f"- "
                             # add indent to all lines except first
-                            r_lines = result.content.split("\n")
+                            r_lines = result.memory.memory.split("\n")
                             s += r_lines[0] + "  \n"
                             for line in r_lines[1:]:
                                 s += "    " + line + "  \n"

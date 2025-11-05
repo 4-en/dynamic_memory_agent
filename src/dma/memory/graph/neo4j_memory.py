@@ -218,6 +218,7 @@ class Neo4jMemory(GraphMemory):
         mem_dict['authors'] = memory.source.authors if memory.source else []
         mem_dict['publisher'] = memory.source.publisher if memory.source else None
         mem_dict['source_type'] = memory.source.source_type.value if memory.source else None
+        mem_dict['references'] = [source.source for source in memory.references] if memory.references else []
         
         entities_list = [ {'name': name, 'count': count} for name, count in memory.entities.items()]
         
@@ -321,6 +322,7 @@ class Neo4jMemory(GraphMemory):
             mem_dict["authors"] = memory.source.authors if memory.source else []
             mem_dict["publisher"] = memory.source.publisher if memory.source else None
             mem_dict["source_type"] = memory.source.source_type.value if memory.source else None
+            mem_dict["references"] = [source.source for source in memory.references] if memory.references else []
             
             mem_dicts.append(mem_dict)
             
@@ -448,6 +450,8 @@ class Neo4jMemory(GraphMemory):
             mem_dict["authors"] = memory.source.authors if memory.source else []
             mem_dict["publisher"] = memory.source.publisher if memory.source else None
             mem_dict["source_type"] = memory.source.source_type.value if memory.source else None
+            # TODO: implement references in batch add
+            mem_dict["references"] = [source.source for source in memory.references] if memory.references else []
             
             mem_dicts.append(mem_dict)
             

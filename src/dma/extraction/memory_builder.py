@@ -26,10 +26,12 @@ class MemoryBuilder:
         
         # add in batch to retriever
         BATCH_SIZE = 25
+        print(f"Adding {len(memories)} memories to retriever in batches of {BATCH_SIZE}...")
         for i in tqdm.tqdm(range(0, len(memories), BATCH_SIZE), desc="Adding memories to retriever"):
             batch = memories[i:i+BATCH_SIZE]
-            print(f"Adding batch {i//BATCH_SIZE + 1} with {len(batch)} memories...")
-            self.retriever.add_memories(batch)
+            res = self.retriever.add_memory_batch(batch)
+            if not res:
+                print(f"Failed to add batch starting at index {i}.")
             
         print(f"Total memories added: {len(memories)}")
         return memories

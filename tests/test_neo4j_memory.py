@@ -40,7 +40,9 @@ for i, text in enumerate(sample_texts):
         memory_time_point=time.time() - i * 86400 * 7,  # spaced a week apart
         
     )
-    
+
+    memory.references = [Source.from_web(f"https://example.com/article_{i}", authors=[f"Author {i}"], publisher="Example Publisher")]
+
     if i == 0:
         # add a source for first memory
         memory.source = Source.from_web("https://example.com/jwst", authors=["Jane Doe", "John Smith"], publisher="Example Publisher")

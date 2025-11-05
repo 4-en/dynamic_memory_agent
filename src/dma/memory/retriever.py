@@ -107,10 +107,10 @@ class Retriever:
         all_memory_results = {}
         for entity_list in entity_results.values():
             for graph_result in entity_list:
-                all_memory_results[graph_result.id] = graph_result.memory
+                all_memory_results[graph_result.memory.id] = graph_result.memory
         for embed_list in embedding_results:
             for graph_result in embed_list:
-                all_memory_results[graph_result.id] = graph_result.memory
+                all_memory_results[graph_result.memory.id] = graph_result.memory
 
         # to list
         all_memory_results = list(all_memory_results.values())
@@ -137,7 +137,7 @@ class Retriever:
         if top_k is not None and len(ranked_results) > top_k:
             ranked_results = ranked_results[:top_k]
             
-        return [res.memory for res in ranked_results]
+        return ranked_results
 
         
         
@@ -191,7 +191,7 @@ class Retriever:
                     best_memory = memory
             if best_memory is None:
                 break
-            ranked_memories.append(GraphResult(memory=best_memory, score=best_score))
+            ranked_memories.append(MemoryResult(memory=best_memory, score=best_score))
             memory_pool.remove(best_memory)
             # update entity counts
             for entity in entities:
@@ -212,7 +212,7 @@ class Retriever:
         embeddings = []
         for q in query.queries:
             if q.embedding_query:
-                embeddings.append(q.embedding_query)
+                embeddings.append(q.embedding_query.embedding.tolist())
             if q.entity_queries:
                 for entity_query in q.entity_queries:
                     if not entity_query.entity in entities:
