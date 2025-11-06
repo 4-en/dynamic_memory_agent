@@ -652,10 +652,61 @@ class Neo4jMemory(GraphMemory):
             memories[primary_name].append((memory, score))
         return memories
     
+    def _query_memories_by_entities2(self, tx, entities: list[str], limit: int = 10) -> list[GraphResult]:
+        # This query uses CALL {} to process each entity's memories
+        # separately, avoiding a massive global sort.
+        query = """
+        // 1. Unwind your input list of primary entities
+        UNWIND $entity_names AS primary_name
+
+        // 2. For each primary_name, call a subquery to find its top N memories
+        CALL(primary_name) {
+            WITH primary_name
+            
+            // 3. Find the primary entity and all memories mentioning it
+            MATCH (primary_e:Entity {name: primary_name})<-[:MENTIONS]-(m:Memory)
+
+            // 4. Calculate diversity score more efficiently
+            // Find all *other* entities from the list this memory mentions
+            OPTIONAL MATCH (m)-[:MENTIONS]->(other_e:Entity)
+            WHERE other_e.name IN $entity_names AND other_e.name <> primary_name
+            
+            // 5. Group by 'm' to get the count
+            WITH primary_name, m, COUNT(other_e) AS diversity_score
+                
+
+            // 6. Sort *only this entity's* memories and take the top N
+            // This is the main performance win.
+            ORDER BY diversity_score DESC, m.last_access DESC
+            LIMIT $top_n
+
+            // 7. Efficiently fetch the *full* entity list for the final,
+            //    filtered memories (e.g., 'n' rows per primary_name)
+            WITH primary_name, m, diversity_score,
+                [(m)-[men:MENTIONS]->(e_all:Entity) | {name: e_all.name, count: men.count}] AS entities,
+                [(m)-[:AUTHORED_BY]->(a:Author) | a.name] AS authors,
+                head([(m)-[:SOURCED_FROM]->(s:Source) | s.name]) AS source
+
+            RETURN primary_name as primary, m AS node, diversity_score, entities, authors, source
+        }
+        // 8. Return the combined results from all subquery calls
+        RETURN primary, node, diversity_score, entities, authors, source
+        """
+        result = tx.run(query, entity_names=entities, top_n=limit)
+        memories = {}
+        for record in result:
+            primary_name = record['primary']
+            memory = self._record_to_memory(record) # Assumes this function exists
+            score = record['diversity_score']
+            if primary_name not in memories:
+                memories[primary_name] = []
+            memories[primary_name].append((memory, score))
+        return memories
+    
     def query_memories_by_entities(self, entities: list[str], limit: int = 10) -> dict[list[GraphResult]]:
         try:
             with self.driver.session(database=self.database) as session:
-                mem_dict = session.execute_read(self._query_memories_by_entities, entities, limit)
+                mem_dict = session.execute_read(self._query_memories_by_entities2, entities, limit)
                 
                 result_dict = {}
                 for entity, mem_list in mem_dict.items():
@@ -664,6 +715,8 @@ class Neo4jMemory(GraphMemory):
                 return result_dict
         except Exception as e:
             logging.error(f"Error querying memories by entities: {e}")
+            import traceback
+            traceback.print_exc()
             return {}
         
     def _query_memories_by_vector(self, tx, vector: list[float], top_k: int = 10) -> list[GraphResult]:
