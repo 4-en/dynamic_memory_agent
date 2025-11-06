@@ -10,7 +10,7 @@ def print_results(results):
     for entity, graph_results in results.items():
         print(f"Entity: {entity}")
         for i, mem_res in enumerate(graph_results):
-            print(f"  Memory {i} (ID: {mem_res.memory.id}) has {len(mem_res.memory.entities)} entities.")
+            print(f"  Memory {i} (ID: {mem_res.memory.id}, score: {mem_res.score}) has {len(mem_res.memory.entities)} entities.")
 
 def benchmark(fn, *args, **kwargs):
     start_time = time()

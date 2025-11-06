@@ -666,14 +666,25 @@ class Neo4jMemory(GraphMemory):
             // 3. Find the primary entity and all memories mentioning it
             MATCH (primary_e:Entity {name: primary_name})<-[:MENTIONS]-(m:Memory)
 
-            // 4. Calculate diversity score more efficiently
-            // Find all *other* entities from the list this memory mentions
-            OPTIONAL MATCH (m)-[:MENTIONS]->(other_e:Entity)
-            WHERE other_e.name IN $entity_names AND other_e.name <> primary_name
+            // 4. Calculate the score numerator (Rules 1 & 2)
+            // Find all MENTIONS relationships to entities *in the list*
+            OPTIONAL MATCH (m)-[r_list:MENTIONS]->(e_list:Entity)
+            WHERE e_list.name IN $entity_names
             
-            // 5. Group by 'm' to get the count
-            WITH primary_name, m, COUNT(other_e) AS diversity_score
-                
+            // 5. Calculate numerator, denominator, and final score (Rule 3)
+            // Group by 'm' to get the sum of counts for list entities
+            WITH primary_name, m, COALESCE(SUM(r_list.count), 0) AS numerator
+            
+            // Get the total number of entities this memory mentions (denominator)
+            // FIXED: Replaced size() with COUNT {} for modern Cypher syntax
+            WITH primary_name, m, numerator, COUNT { (m)-[:MENTIONS]->() } AS total_entities_mentioned
+            
+            // Calculate the final score, avoiding division by zero
+            WITH primary_name, m,
+                CASE
+                    WHEN total_entities_mentioned = 0 THEN 0
+                    ELSE toFloat(numerator) / total_entities_mentioned
+                END AS diversity_score
 
             // 6. Sort *only this entity's* memories and take the top N
             // This is the main performance win.
