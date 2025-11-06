@@ -298,6 +298,27 @@ class Message:
             The text content of the message.
         """
         self.content = [TextPart(value)]
+        
+    @property
+    def full_text(self) -> str:
+        """
+        Return the full text content of the message, including thoughts.
+
+        Returns
+        -------
+        str
+            The full text content of the message.
+        """
+        if self.content is None:
+            return ""
+        
+        if type(self.content) is str:
+            return self.content
+        
+        if type(self.content) is list:
+            return "\n".join([part.text if type(part) is TextPart else f"<think>{part.thought}</think>" for part in self.content])
+        
+        return self.content
 
     @property
     def reasoning_text(self) -> str:

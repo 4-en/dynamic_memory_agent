@@ -197,7 +197,8 @@ class LlamaCppChatCompletionGenerator(BaseGenerator):
                 temperature=self.config.llm_temperature,
                 top_p=self.config.llm_top_p,
                 top_k=self.config.llm_top_k,
-                max_tokens=self.config.llm_max_tokens_gen
+                max_tokens=self.config.llm_max_tokens_gen,
+                
             )
             
             return self.convert_output_to_message(output["choices"][0]["message"]["content"])

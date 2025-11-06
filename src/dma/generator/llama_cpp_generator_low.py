@@ -351,21 +351,73 @@ class LowLevelLlamaCppGenerator(BaseGenerator):
 
         message_str = self.generate_input_string_qwen2_basic(conversation)
 
-        print("=== Input to model ===")
-        print(message_str)
-        print("======================")
+        # print("=== Input to model ===")
+        # print(message_str)
+        # print("======================")
         
-        response = self.model(
-            prompt=message_str,
-            max_tokens=self.config.llm_max_tokens_gen if self.config.llm_max_tokens_gen > 0 else None,
-            temperature=self.config.llm_temperature,
-            top_p=self.config.llm_top_p,
-            top_k=self.config.llm_top_k,
-        )
+        # if we have a response format, we try to guide the llm to generate a json
+        # response by prefilling the json structure after the <think> tags
+        # for example: "<think>Here I am thinking about the answer.</think>\n{\n  \"answer\": \""
+        response = None
+        content = ""
+        if response_format is None:
+            response = self.model(
+                prompt=message_str,
+                max_tokens=self.config.llm_max_tokens_gen if self.config.llm_max_tokens_gen > 0 else None,
+                temperature=self.config.llm_temperature,
+                top_p=self.config.llm_top_p,
+                top_k=self.config.llm_top_k,
+            )
+            content = response["choices"][0]["text"]
+        else:
+            schema = response_format.model_json_schema()
+            properties = schema.get('properties', {})
+            first_field = list(properties.keys())[0] if properties else None
+            start_json = "{\n  "
+            if first_field:
+                start_json += f'"{first_field}": "'
+                
+            last_think_open = message_str.rfind("<think>")
+            last_think_close = message_str.rfind("</think>")
+            think_first = last_think_open > last_think_close
+            
+            # we let the model think first, then generate the json structure
+            if think_first:
+                think_response = self.model(
+                    prompt=message_str,
+                    max_tokens=self.config.llm_max_tokens_gen if self.config.llm_max_tokens_gen > 0 else None,
+                    temperature=self.config.llm_temperature,
+                    top_p=self.config.llm_top_p,
+                    top_k=self.config.llm_top_k,
+                    stop=["</think>"]
+                )
+                think_content = think_response["choices"][0]["text"]
+                # now generate the json part
+                json_prompt = message_str + think_content + "</think>\n" + start_json
+                response = self.model(
+                    prompt=json_prompt,
+                    max_tokens=self.config.llm_max_tokens_gen if self.config.llm_max_tokens_gen > 0 else None,
+                    temperature=self.config.llm_temperature,
+                    top_p=self.config.llm_top_p,
+                    top_k=self.config.llm_top_k
+                )
+                content = think_content + "</think>\n" + start_json + response["choices"][0]["text"]
+            else:
+                # generate the json part directly
+                json_prompt = message_str + start_json
+                response = self.model(
+                    prompt=json_prompt,
+                    max_tokens=self.config.llm_max_tokens_gen if self.config.llm_max_tokens_gen > 0 else None,
+                    temperature=self.config.llm_temperature,
+                    top_p=self.config.llm_top_p,
+                    top_k=self.config.llm_top_k
+                )
+                content = start_json + response["choices"][0]["text"]
+            
         
         logging.info("Response generated.")
         
-        content = response["choices"][0]["text"]
+        
         
         return self.convert_output_to_message(content, conversation)
         

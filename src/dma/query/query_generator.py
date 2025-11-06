@@ -60,8 +60,14 @@ class QueryGenerator:
         """
         # Prepare the prompt for the generator
         prompt: Conversation = self._prepare_prompt(conversation, retrieval)
-        beginning: str | None = self._get_reply_beginning()
+        is_first_iteration = (retrieval is None or
+                                len(retrieval.steps) == 0 or
+                                len(retrieval.steps) == 1 and retrieval.steps[0].is_pre_query)
+        beginning: str | None = self._get_reply_beginning(is_first_iteration)
         
+        if beginning == None:
+            raise ValueError("The generator does not support custom reply beginnings.")
+
         if not retrieval:
             user_prompt = conversation.messages[-1] if conversation.messages else None
             if not user_prompt or user_prompt.role != Role.USER:
@@ -80,7 +86,9 @@ class QueryGenerator:
         while not success and attempts < max_attempts:
             try:
                 # Generate the queries using the generator
-                response = self.generator.generate(prompt, context=beginning)
+                response = self.generator.generate(prompt, context=beginning, response_format=QueryResponseModel)
+                
+                print(f"[Debug] Query Generator Response:\n{response.full_text}\n")
 
                 # Parse the response to extract queries
                 step = self._parse_response(response)
@@ -259,7 +267,7 @@ class QueryGenerator:
 
         return Conversation(messages=messages)
     
-    def _get_reply_beginning(self) -> str | None:
+    def _get_reply_beginning(self, is_first_iteration=True) -> str | None:
         """
         Return a standard beginning for the assistant's reply.
         Useful to prime the model to think before answering.
@@ -270,7 +278,10 @@ class QueryGenerator:
             The reply beginning to add.
         """
         beginning = "Okay, first I should think if the user's prompt has enough context to generate relevant queries, and if so, I will generate them in JSON format as specified."
-        if self.generator is LowLevelLlamaCppGenerator:
+        
+        if not is_first_iteration:
+            beginning = "Okay, I should think again if the user's prompt now has enough context and if not, generate more relevant queries in JSON format as specified. Otherwise, I can leave the list empty."
+        if isinstance(self.generator, LowLevelLlamaCppGenerator):
             # only the low level model supports custom beginnings
             return beginning
         return None
@@ -295,10 +306,10 @@ class QueryGenerator:
         # could help the model understand why certain queries were made
         # and potentially avoid repeating the same queries
         message_content = []
-        if step.reasoning:
-            message_content.append(f"<think>{step.reasoning}</think>")
+        # if step.reasoning:
+        #     message_content.append(f"<think>{step.reasoning}</think>")
 
-        message_content.append("Retrieved Context:")
+        message_content.append("Retrieved Context from previous queries:")
         for memory_result in step.results:
             memory = memory_result.memory
             memory_content = memory.memory
@@ -311,7 +322,7 @@ class QueryGenerator:
             message_content.append(f"- {part}")
 
         messages.append(Message(
-            role=Role.ASSISTANT,
+            role=Role.USER,
             content="\n".join(message_content)
         ))
         
