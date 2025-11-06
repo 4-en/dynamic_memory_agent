@@ -6,7 +6,7 @@ from typing import List
 @dataclass
 class WebSourceData:
     """
-    A dataclass to hold structured data for a single Wikipedia page.
+    A dataclass to hold structured data for a single Wiki page.
     
     Attributes
     ----------
