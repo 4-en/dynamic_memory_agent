@@ -251,7 +251,7 @@ class DMAWebUI:
             self._generating_response = False
             
 
-    async def yield_word_by_word_wrapper(self, inner_generator, word_delay=0.01)->AsyncGenerator[StreamingResponseChunk, None]:
+    async def yield_word_by_word_wrapper(self, inner_generator, time_per_chunk=1.0, messages_per_second=10.0)->AsyncGenerator[StreamingResponseChunk, None]:
         """
         Wraps an async generator to yield its output word by word with a delay.
         """
@@ -260,10 +260,18 @@ class DMAWebUI:
             if not content:
                 yield chunk
                 continue
+            
+            # calculate n of words and delay
+            delay = 1.0 / messages_per_second
             words = content.split(" ")
-            for word in words:
-                yield StreamingResponseChunk(type=chunk.type, content=word + " ")
-                await asyncio.sleep(word_delay)
+            words_per_chunk = max(1, int(len(words) * delay / time_per_chunk))
+            for i in range(0, len(words), words_per_chunk):
+                sub_content = " ".join(words[i:i+words_per_chunk])
+                if not (i + 1) * words_per_chunk >= len(words):
+                    # last chunk, yield full chunk type
+                    sub_content += " "
+                yield StreamingResponseChunk(type=chunk.type, content=sub_content)
+                await asyncio.sleep(delay)
                 
     async def chunks_to_json_stream(self, chunk_generator: AsyncGenerator[StreamingResponseChunk, None]) -> AsyncGenerator[bytes, None]:
         """
@@ -287,7 +295,7 @@ class DMAWebUI:
             return "{\"type\": \"error\", \"content\": \"Error: Invalid user token.\"}"
 
         return StreamingResponse(
-            self.chunks_to_json_stream(self.generate_response(request)),
+            self.chunks_to_json_stream(self.yield_word_by_word_wrapper(self.generate_response(request))),
             media_type="application/json"
         )
 

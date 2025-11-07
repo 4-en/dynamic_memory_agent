@@ -140,7 +140,27 @@ chatForm.addEventListener('submit', async (event) => {
                 // Find the matching end brace
                 let endIdx = startIdx + 1;
                 let braceCount = 1;
+                let in_quotes = false;
+                let quote_char = '';
                 while (endIdx < buffer.length) {
+
+                    // Handle string literals to avoid counting braces inside strings
+                    if (in_quotes) {
+                        if (buffer[endIdx] === quote_char && buffer[endIdx - 1] !== '\\') {
+                            in_quotes = false;
+                            quote_char = '';
+                        }
+                        endIdx++;
+                        continue;
+                    } else {
+                        if (buffer[endIdx] === '"' || buffer[endIdx] === "'") {
+                            in_quotes = true;
+                            quote_char = buffer[endIdx];
+                            endIdx++;
+                            continue;
+                        }
+                    }
+
                     if (buffer[endIdx] === '{') braceCount++;
                     else if (buffer[endIdx] === '}') braceCount--;
                     if (braceCount === 0) break;
