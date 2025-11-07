@@ -341,8 +341,6 @@ class LowLevelLlamaCppGenerator(BaseGenerator):
             The generated response message.
         """
         
-        if response_format is not None:
-            logging.warning("Response format is not supported in LowLevelLlamaCppGenerator. Ignoring.")
             
         if context is not None:
             conversation = self.add_context_as_reasoning(conversation, context)
