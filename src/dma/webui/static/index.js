@@ -97,7 +97,10 @@ chatForm.addEventListener('submit', async (event) => {
         // replace send button with loading indicator
         const loadingIndicator = document.createElement('span');
         loadingIndicator.classList.add('loader');
-        chatForm.querySelector('#send-button').replaceWith(loadingIndicator);
+        const sendButton = chatForm.querySelector('#send-button');
+        // hide send button without removing to preserve event listeners
+        sendButton.parentNode.appendChild(loadingIndicator);
+        sendButton.style.display = 'none';
 
         const response = await fetch('/api/chat', {
             method: 'POST',
@@ -241,13 +244,14 @@ chatForm.addEventListener('submit', async (event) => {
         addMessage('assistant', 'response', 'Sorry, an error occurred. Please try again.');
     } finally {
         // restore send button
-        const sendButton = document.createElement('button');
-        sendButton.id = 'send-button';
-        sendButton.type = 'submit';
-        sendButton.textContent = 'Send';
-        chatForm.querySelector('.loader').replaceWith(sendButton);
+        const sendButton = chatForm.querySelector('#send-button');
+        sendButton.style.display = 'inline-block';
+        sendButton.disabled = false;
+        //sendButton.id = 'send-button';
+        //sendButton.type = 'submit';
+        //sendButton.textContent = 'Send';
+        chatForm.querySelector('.loader').remove();
         messageInput.disabled = false;
-        chatForm.querySelector('#send-button').disabled = false;
         messageInput.focus();
     }
 });

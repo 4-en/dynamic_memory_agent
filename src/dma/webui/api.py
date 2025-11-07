@@ -8,7 +8,7 @@ from starlette.middleware.cors import CORSMiddleware
 import pathlib
 
 from dma.pipeline import Pipeline, PipelineUpdate, PipelineStatus
-from dma.core import Conversation, Message, Role, RetrievalStep, RetrievalQuery
+from dma.core import Conversation, Message, Role, RetrievalStep, RetrievalQuery, Source, SourceType
 import logging
 import json
 
@@ -203,10 +203,25 @@ class DMAWebUI:
         yield StreamingResponseChunk(type="response", content=content)
 
         # add metadata info if available
-        if response.source_ids:
-            sources = "\n**Sources:**\n"
-            sources += "\n".join(f" - {source_id}" for source_id in response.source_ids)
-            yield StreamingResponseChunk(type="response", content=sources)
+        if response.source_memories:
+            source_list = [m.source for m in response.source_memories if m.source]
+            # only include unique sources
+            unique_sources = list(set(source_list))
+            if len(unique_sources) > 0:
+                source_entries = []
+                for src in unique_sources:
+                    if src.source_type == SourceType.WEB:
+                        # markdown link
+                        entry = f"- [{src.source}](https://{src.full_source})"
+                        source_entries.append(entry)
+                    elif src.source_type == SourceType.DOCUMENT:
+                        entry = f"- {src.full_source}"
+                        source_entries.append(entry)
+                    else:
+                        entry = f"- {src.full_source}"
+                        source_entries.append(entry)
+                sources_md = "\n\n### Sources:\n" + "\n".join(source_entries)
+                yield StreamingResponseChunk(type="response", content=sources_md)
 
         return
             
@@ -251,7 +266,7 @@ class DMAWebUI:
             self._generating_response = False
             
 
-    async def yield_word_by_word_wrapper(self, inner_generator, time_per_chunk=1.0, messages_per_second=10.0)->AsyncGenerator[StreamingResponseChunk, None]:
+    async def yield_word_by_word_wrapper(self, inner_generator, time_per_chunk=2.0, messages_per_second=6.0)->AsyncGenerator[StreamingResponseChunk, None]:
         """
         Wraps an async generator to yield its output word by word with a delay.
         """
@@ -266,10 +281,10 @@ class DMAWebUI:
             words = content.split(" ")
             words_per_chunk = max(1, int(len(words) * delay / time_per_chunk))
             for i in range(0, len(words), words_per_chunk):
-                sub_content = " ".join(words[i:i+words_per_chunk])
-                if not (i + 1) * words_per_chunk >= len(words):
-                    # last chunk, yield full chunk type
-                    sub_content += " "
+                sub_content = " ".join(words[i:i+words_per_chunk]) + " "
+                #if (i + 1) * words_per_chunk < len(words):
+                #    # add trailing space if not last chunk
+                #    sub_content += " "
                 yield StreamingResponseChunk(type=chunk.type, content=sub_content)
                 await asyncio.sleep(delay)
                 

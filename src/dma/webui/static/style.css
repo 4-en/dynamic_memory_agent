@@ -127,6 +127,13 @@ html:not(.dark-mode) .icon-sun {
     transition: background-color 0.3s, color 0.3s;
 }
 
+.message a:link,
+.message a:visited,
+.message a {
+    color: inherit;
+    text-decoration: underline;
+}
+
 .user-message {
     background-color: var(--user-message-bg);
     color: var(--user-message-text);

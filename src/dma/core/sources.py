@@ -201,3 +201,8 @@ class Source:
         if not isinstance(other, Source):
             return False
         return (self.source == other.source)
+    
+    def __hash__(self):
+        if self.source:
+            return hash(self.source)
+        return hash((self.source_type, self.full_source, tuple(self.authors), self.publisher))

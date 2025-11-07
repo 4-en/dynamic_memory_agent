@@ -418,6 +418,17 @@ class Pipeline:
             1.0
         )
         
+        # add sources to response if available
+        if retrieval and len(retrieval.steps) > 0:
+            last_step = retrieval.steps[-1]
+            source_memories = []
+            for step in retrieval.steps:
+                if step.is_pre_query:
+                    continue
+                for result in step.results:
+                    source_memories.append(result.memory)
+            response.source_memories = source_memories
+        
         return response
     
     def generate(

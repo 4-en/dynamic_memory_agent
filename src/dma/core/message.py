@@ -4,6 +4,7 @@ from uuid import uuid4
 # from aiko.utils.estimate_tokens import estimate_tokens
 from enum import Enum
 from abc import ABC, abstractmethod
+from .memory import Memory
 
 class Role(Enum):
     """
@@ -205,6 +206,8 @@ class Message:
     
     # source ids used in retrieval (for assistant messages)
     source_ids: list[str] = field(default_factory=list)
+    
+    source_memories: list[Memory] = field(default_factory=list)
     
     # embedding vector for message text content
     embedding: list[float] = None
