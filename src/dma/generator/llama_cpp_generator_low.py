@@ -1,5 +1,5 @@
 from pydantic import BaseModel
-from .base_generator import BaseGenerator
+from .base_generator import BaseGenerator, ObjectResult
 from dma.core import Conversation, Message, Role, MessagePart, ThoughtPart, TextPart
 from dma.config import DmaConfig, get_config
 from llama_cpp import Llama
@@ -418,6 +418,116 @@ class LowLevelLlamaCppGenerator(BaseGenerator):
         
         
         return self.convert_output_to_message(content, conversation)
+    
+    def generate_object(self,
+                        conversation:Conversation,
+                        response_format:BaseModel,
+                        context:str=None,
+                        allow_reasoning:bool=True,
+                        max_attempts:int=3,
+                        **kwargs) -> ObjectResult:
+        """
+        Generate a structured object based on the conversation.
+
+        Parameters
+        ----------
+        conversation : Conversation
+            The conversation to generate the object for.
+        response_format : BaseModel
+            The format of the model output.
+        context : str, optional
+            The context of the conversation. Can include retrieved information,
+            inner monologue, etc.
+        allow_reasoning : bool, optional
+            Whether to allow the model to use reasoning to generate the object.
+            If True, the model can generate intermediate reasoning steps.
+        max_attempts : int, optional
+            The maximum number of attempts to generate a valid object.
+
+        Returns
+        -------
+        ObjectResult
+            The result of the object generation.
+        """
+        if context is not None:
+            conversation = self.add_context_as_reasoning(conversation, context)
+        
+        logging.info("Generating object response...")
+
+        message_str = self.generate_input_string_qwen2_basic(conversation)
+
+        
+        # if we have a response format, we try to guide the llm to generate a json
+        # response by prefilling the json structure after the <think> tags
+        # for example: "<think>Here I am thinking about the answer.</think>\n{\n  \"answer\": \""
+        response = None
+        content = ""
+        if response_format is None:
+            raise ValueError("response_format must be provided for generate_object.")
+        
+        schema = response_format.model_json_schema()
+        properties = schema.get('properties', {})
+        first_field = list(properties.keys())[0] if properties else None
+        start_json = "{\n  "
+        if first_field:
+            start_json += f'"{first_field}": "'
+            
+        last_think_open = message_str.rfind("<think>")
+        last_think_close = message_str.rfind("</think>")
+        think_first = last_think_open > last_think_close
+        
+        if think_first and not allow_reasoning:
+            # if reasoning is not allowed, close the think tag
+            message_str += "</think>\n"
+            think_first = False
+        
+        # we let the model think first, then generate the json structure
+        think_content = ""
+        if think_first:
+            think_response = self.model(
+                prompt=message_str,
+                max_tokens=self.config.llm_max_tokens_gen if self.config.llm_max_tokens_gen > 0 else None,
+                temperature=self.config.llm_temperature,
+                top_p=self.config.llm_top_p,
+                top_k=self.config.llm_top_k,
+                stop=["</think>"],
+                seed=kwargs.get("seed", None)
+            )
+            think_content = think_response["choices"][0]["text"] + "</think>\n"
+        # now generate the json part
+        attempts = 0
+        while attempts < max_attempts:
+            attempts += 1
+            
+            json_prompt = message_str + think_content + start_json
+            response = self.model(
+                prompt=json_prompt,
+                max_tokens=self.config.llm_max_tokens_gen if self.config.llm_max_tokens_gen > 0 else None,
+                temperature=self.config.llm_temperature,
+                top_p=self.config.llm_top_p,
+                top_k=self.config.llm_top_k,
+                seed=attempts + kwargs.get("seed", 0)  # different seed for each attempt
+            )
+            content = think_content + start_json + response["choices"][0]["text"]
+            
+            # try to parse the json content
+            try:
+                message = self.convert_output_to_message(content, conversation)
+                # extract the json part from the message
+                message_json_str = message.message_text
+                json_start = message_json_str.find("{")
+                json_end = message_json_str.rfind("}")
+                if json_start == -1 or json_end == -1 or json_end < json_start:
+                    raise ValueError("No valid JSON found in the output.")
+                json_str = message_json_str[json_start:json_end+1]
+                obj = response_format.model_validate_json(json_str)
+                return ObjectResult(success=True, result=obj, reasoning=message.reasoning_text, message=message)
+            except Exception as e:
+                logging.warning(f"Attempt {attempts} to parse object failed: {e}")
+                continue
+
+            
+        return ObjectResult(success=False, error_message="Failed to generate valid object after maximum attempts.")
         
 
 

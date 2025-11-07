@@ -38,6 +38,26 @@ class GeneratorConfig:
     stop: list[str] = field(default_factory=lambda: [])
     
     
+@dataclass
+class ObjectResult:
+    """
+    A result object from a generator.
+    
+    Attributes
+    ----------
+    success : bool
+        Whether the generation was successful.
+    result : BaseModel | None
+        The generated object, if successful.
+    error_message : str | None
+        The error message, if not successful.
+    """
+    
+    success: bool
+    result: BaseModel | None = None
+    reasoning: str | None = None
+    message: Message | None = None
+    error_message: str | None = None
 
 class BaseGenerator(ABC):
     """
@@ -76,6 +96,40 @@ class BaseGenerator(ABC):
             The response generated.
         """
         pass
+    
+    @abstractmethod
+    def generate_object(self,
+                        conversation:Conversation,
+                        response_format:BaseModel,
+                        context:str=None,
+                        allow_reasoning:bool=True,
+                        max_attempts:int=3,
+                        **kwargs
+    ) -> ObjectResult:
+        """
+        Generate a response based on the conversation and parse it into an object.
+        
+        Parameters
+        ----------
+        conversation : Conversation
+            The conversation to generate a response for.
+        context : str, optional
+            The context of the conversation. Can include retrieved information,
+            inner monologue, etc.
+        response_format : BaseModel, optional
+            The format of the model output.
+        allow_reasoning : bool, optional
+            Whether to allow the model to use reasoning to generate the object.
+            If True, the model can generate intermediate reasoning steps.
+        max_attempts : int, optional
+            The maximum number of attempts to generate a valid object.
+            
+        Returns
+        -------
+        ObjectResult
+            The result of the object generation.
+        """
+        raise NotImplementedError()
     
     def add_context_as_expert(self, conversation: Conversation, context: str) -> Conversation:
         """

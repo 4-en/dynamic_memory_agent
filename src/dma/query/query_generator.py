@@ -7,12 +7,12 @@
 # - Previous retrieval results (iterative query refinement)
 # - Any other relevant information that can help in formulating effective queries.
 
-from dma.generator import BaseGenerator, LowLevelLlamaCppGenerator
+from dma.generator import BaseGenerator, LowLevelLlamaCppGenerator, ObjectResult
 from dma.core import Conversation, Message, Retrieval, TimeRelevance, Role, RetrievalStep, RetrievalQuery, EntityQuery
 from dma.utils import parse_timestamp
 
 import logging
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 import json
 
 
@@ -22,8 +22,8 @@ class ContextQuery(BaseModel):
     """
     query: str # a query in form of a question to retrieve relevant memories
     topic: str = None # the topic or entity the query is focused on
-    entities: list[str] # a list of named entities, such as people, places
-    time_relevance: TimeRelevance = TimeRelevance.UNKNOWN
+    entities: list[str] = Field(default_factory=list) # a list of named entities, such as people, places
+    time_relevance: str = "UNKNOWN" # a time frame the query is focused on, one of ['UNKNOWN', 'DAY', 'WEEK', 'MONTH', 'YEAR', 'DECADE', 'CENTURY', 'ALWAYS']
     time_point: str = "UNKNOWN" # a specific time point or period the query is focused on
     
 class QueryResponseModel(BaseModel):
@@ -31,8 +31,8 @@ class QueryResponseModel(BaseModel):
     A QueryResponseModel represents the response from the query generator.
     It contains a list of ContextQuery objects.
     """
-    clarification_needed: bool
-    queries: list[ContextQuery]
+    is_user_clarification_needed: bool = False
+    queries: list[ContextQuery] = Field(default_factory=list)
 
 class QueryGenerator:
     """
@@ -78,26 +78,43 @@ class QueryGenerator:
                 steps=[]
             )
             
-        attempts = 0
-        max_attempts = 3
-        success = False
-        step: RetrievalStep | None = None
+        #attempts = 0
+        #max_attempts = 3
+        #success = False
+        #step: RetrievalStep | None = None
         
-        while not success and attempts < max_attempts:
+        #while not success and attempts < max_attempts:
+        #    try:
+        #        # Generate the queries using the generator
+        #        response = self.generator.generate(prompt, context=beginning, response_format=QueryResponseModel)
+        #        
+        #        print(f"[Debug] Query Generator Response:\n{response.full_text}\n")
+        #        # Parse the response to extract queries
+        #        step = self._parse_response(response)
+        #        success = True
+        #        
+        #    except Exception as e:
+        #        logging.error(f"Error generating queries: {e}")
+        #        attempts += 1
+        #        continue
+        
+        result = self.generator.generate_object(
+            prompt,
+            response_format=QueryResponseModel,
+            context=beginning,
+            allow_reasoning=True,
+            max_attempts=3
+        )
+        
+        success = result.success
+        step: RetrievalStep | None = None
+        if success:
             try:
-                # Generate the queries using the generator
-                response = self.generator.generate(prompt, context=beginning, response_format=QueryResponseModel)
-                
-                print(f"[Debug] Query Generator Response:\n{response.full_text}\n")
-
-                # Parse the response to extract queries
-                step = self._parse_response(response)
-                success = True
-                
+                step = self._parse_response2(result.result, result.reasoning or "")
             except Exception as e:
-                logging.error(f"Error generating queries: {e}")
-                attempts += 1
-                continue
+                logging.error(f"Error parsing generated queries: {e}")
+                success = False
+            
 
         
         if step and success:
@@ -165,7 +182,7 @@ class QueryGenerator:
         formats = (
             "The response should be a JSON object with the following structure:\n"
             "{\n"
-            "  \"clarification_needed\": bool, # true if the user's prompt is unclear and needs clarification, false otherwise\n"
+            "  \"is_user_clarification_needed\": bool, # true if the user's prompt is unclear and needs clarification, false otherwise\n"
             "  \"queries\": [\n"
             "    {\n"
             "      \"query\": str, # a query in form of a question to retrieve relevant memories, as verbose as possible\n"
@@ -201,7 +218,7 @@ class QueryGenerator:
             "Previous retrieval: Memories related to project timelines and financial reports.\n"
             "Generated response:\n"
             "{\n"
-            "  \"clarification_needed\": false,\n"
+            "  \"is_userclarification_needed\": false,\n"
             "  \"queries\": [\n"
             "    {\n"
             "      \"query\": \"What were the key points discussed about the EEG project MiniEEG in the meeting last week?\",\n"
@@ -325,6 +342,53 @@ class QueryGenerator:
             role=Role.USER,
             content="\n".join(message_content)
         ))
+        
+    def _parse_response2(self, response:QueryResponseModel, reasoning:str) -> RetrievalStep:
+        """
+        Parse the response from the query generator to extract queries
+        and update the retrieval object.
+        
+        Parameters
+        ----------
+        response : QueryResponseModel
+            The response model from the query generator.
+        reasoning : str
+            The reasoning text from the response.
+        
+        Returns
+        -------
+        RetrievalStep
+            The updated retrieval step with new queries.
+        """
+            
+        # Create a new retrieval step
+        new_step = RetrievalStep(queries=[], results=[])
+        new_step.reasoning = reasoning
+        new_step.clarification_needed = response.is_user_clarification_needed
+        
+        if len(response.queries) == 0:
+            # No queries generated
+            return new_step
+        
+        for query in response.queries:
+            try:
+                retrieval_query = RetrievalQuery.from_text(
+                    query_text=query.query,
+                    entity_queries=EntityQuery.from_entities(query.entities),
+                    weight=1.0,
+                    time_relevance=TimeRelevance.from_string(query.time_relevance),
+                    timestamp=parse_timestamp(query.time_point)
+                )
+                logging.debug(f"Generated RetrievalQuery: {retrieval_query.embedding_query.query_text}")
+                new_step.queries.append(retrieval_query)
+            except Exception as e:
+                logging.warning(f"Failed to create RetrievalQuery from ContextQuery: {e}")
+                continue
+            
+        if len(new_step.queries) == 0 and len(response.queries) > 0:
+            raise Exception("All generated queries failed to parse into RetrievalQuery objects.")
+            
+        return new_step
         
     def _parse_response(self, response:Message) -> RetrievalStep:
         """
