@@ -23,10 +23,20 @@ themeToggle.addEventListener('click', (event) => {
  * @returns {HTMLElement} The newly created message element
  */
 function addMessage(role, type, content) {
+    // get the status message if it exists
+    const existingStatus = messageList.querySelector('.status-message');
+    if (existingStatus) {
+        existingStatus.remove();
+    }
     const messageElement = document.createElement('div');
     messageElement.classList.add('message', `${role}-message`, `${type}-message`);
     messageElement.textContent = content; // FIX: Use textContent to preserve whitespace
     messageList.appendChild(messageElement);
+
+    // re-add the status message if it existed
+    if (existingStatus) {
+        messageList.appendChild(existingStatus);
+    }
     messageList.scrollTop = messageList.scrollHeight;
     return messageElement;
 }
@@ -195,6 +205,7 @@ chatForm.addEventListener('submit', async (event) => {
                     }
 
                     currentType = chunk.type;
+
                 }
 
                 messageList.scrollTop = messageList.scrollHeight;
