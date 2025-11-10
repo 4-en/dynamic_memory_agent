@@ -229,6 +229,9 @@ class RetrievalStep:
         The list of queries made in this retrieval step.
     results : list[MemoryResult]
         The list of results obtained from the queries.
+    rejected_results : list[MemoryResult]
+        The list of results that were rejected (e.g., by an evaluator).
+        Tracked so that they are not retrieved again in future steps.
     reasoning : str
         An optional reasoning about the queries.
     summary : str
@@ -236,6 +239,7 @@ class RetrievalStep:
     """
     queries: list[RetrievalQuery] = field(default_factory=list)
     results: list[MemoryResult] = field(default_factory=list)
+    rejected_results: list[MemoryResult] = field(default_factory=list)
     reasoning: str = "" # An optional reasoning about the queries
     summary: str = "" # A summary of all retrieved memories
     clarification_needed: bool = False # Whether clarification is needed for the next step

@@ -499,6 +499,8 @@ class LowLevelLlamaCppGenerator(BaseGenerator):
         while attempts < max_attempts:
             attempts += 1
             
+            print(f"Think content before JSON generation:\n{think_content}\n======================")
+            
             json_prompt = message_str + think_content + start_json
             response = self.model(
                 prompt=json_prompt,

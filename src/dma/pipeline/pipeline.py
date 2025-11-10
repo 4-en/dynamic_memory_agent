@@ -419,7 +419,7 @@ class Pipeline:
             1.0
         )
         
-        # add sources to response if available
+        # add sources and entities to response if available
         if retrieval and len(retrieval.steps) > 0:
             last_step = retrieval.steps[-1]
             source_memories = []
@@ -428,7 +428,14 @@ class Pipeline:
                     continue
                 for result in step.results:
                     source_memories.append(result.memory)
+                    for entity, weight in result.memory.entities.items():
+                        if entity not in response.entities:
+                            response.entities[entity] = weight
+                        else:
+                            response.entities[entity] += weight
             response.source_memories = source_memories
+            
+
         
         return response
     
@@ -550,7 +557,7 @@ class Pipeline:
                 retrieval.done = True
                 return
 
-            results: list[MemoryResult] = self.retriever.retrieve(conversation, last_step, top_k=self.config.retrieval_num_results)
+            results: list[MemoryResult] = self.retriever.retrieve(conversation, last_step, previous_retrievals=retrieval, top_k=self.config.retrieval_num_results)
             # TODO: what to do if no results found?
             # for now, we just add an empty result and mark as done
             # alternatives:
@@ -583,6 +590,9 @@ class Pipeline:
                         last_step.summary = summary
                         
                     last_step.results = evaluation.get_relevant_memories()
+                    for result in results:
+                        if result not in last_step.results:
+                            last_step.rejected_results.append(result)
                     
                     # TODO: adjust weights of entities based on evaluation feedback
                     # also consider adding new entities/keywords from evaluation

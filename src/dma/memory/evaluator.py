@@ -161,9 +161,7 @@ class MemoryEvaluator:
         prompt_conversation = self._build_prompt(memories, retrieval_step, conversation)
         
         reply_beginning = (
-            "Okay, first I should examine what the conversation and the provided queries are about, then "
-            "I will evaluate each memory one by one based on their relevance to the queries and conversation context. "
-            "Finally, I will provide a summary of the relevant information found in the memories.\n"
+            "Okay, first I should examine what the conversation and the provided queries are about"
         )
         
         result = self.generator.generate_object(

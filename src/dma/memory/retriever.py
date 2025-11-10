@@ -68,7 +68,7 @@ class Retriever:
         """
         return self.graph_memory.add_memory_series(memories)
     
-    def retrieve(self, conversation: Conversation, query: RetrievalStep, top_k: int = 5) -> list[MemoryResult]:
+    def retrieve(self, conversation: Conversation, query: RetrievalStep, previous_retrievals: Retrieval=None, top_k: int = 5) -> list[MemoryResult]:
         """Retrieve relevant memories based on the provided query.
         
         Parameters
@@ -85,6 +85,13 @@ class Retriever:
         list[Memory]
             A list of retrieved memories.
         """
+        blacklisted_memory_ids = set()
+        if previous_retrievals is not None:
+            for retrieval in previous_retrievals.steps:
+                for result in retrieval.rejected_results:
+                    blacklisted_memory_ids.add(result.memory.id)
+                for result in retrieval.results:
+                    blacklisted_memory_ids.add(result.memory.id)
         
         # 1. create list of entities in previous assistant messages, with count and recency
         entity_scales = self._calculate_entity_scores(conversation)
@@ -114,6 +121,9 @@ class Retriever:
 
         # to list
         all_memory_results = list(all_memory_results.values())
+        
+        # filter out blacklisted memories
+        all_memory_results = [mem for mem in all_memory_results if not mem.id in blacklisted_memory_ids]
             
                 
         # 3. rerank results based on entity scales and other factors
@@ -121,7 +131,7 @@ class Retriever:
         ranked_results = self._rank_memories(all_memory_results, entities, embeddings)
         
         if False:
-            # todo: under some conditions, we may want to expand the query and re-query
+            # TODO: under some conditions, we may want to expand the query and re-query
             # e.g., if we have few results, or if the results are low quality
             
             # 4. expand query based on results and re-query if needed
