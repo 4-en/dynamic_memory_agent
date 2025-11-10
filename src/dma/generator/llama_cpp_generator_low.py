@@ -513,6 +513,8 @@ class LowLevelLlamaCppGenerator(BaseGenerator):
             # try to parse the json content
             try:
                 message = self.convert_output_to_message(content, conversation)
+                
+                print(f"=== Generated message on attempt {attempts} ===\n{message.full_text}\n======================")
                 # extract the json part from the message
                 message_json_str = message.message_text
                 json_start = message_json_str.find("{")

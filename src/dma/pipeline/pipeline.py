@@ -6,7 +6,7 @@ from dma.config import DmaConfig, get_config
 
 from dma.query import QueryGenerator
 from dma.generator import LowLevelLlamaCppGenerator
-from dma.memory import Retriever
+from dma.memory import Retriever, MemoryEvaluator, Evaluation
 import os
 from dotenv import load_dotenv
 import logging
@@ -80,6 +80,7 @@ class Pipeline:
         # placeholders for components
         self.generator = LowLevelLlamaCppGenerator()
         self.query_generator = QueryGenerator(self.generator)
+        self.evaluator = MemoryEvaluator(self.generator)
         try:
             self.retriever = Retriever()
         except Exception as e:
@@ -560,6 +561,34 @@ class Pipeline:
             if len(results) == 0:
                 logging.debug("No results found, stopping retrieval.")
                 retrieval.done = True
+            else:
+                # use evaluator to filter out memories and summarize
+                self._update_progress(
+                    progress_callback,
+                    PipelineStatus.EVALUATION,
+                    "Evaluating retrieved memories...",
+                    current_step / total_steps,
+                    retrieval_step=last_step
+                )
+                evaluation: Evaluation = self.evaluator.evaluate_memories(
+                    last_step,
+                    conversation
+                )
+                if evaluation == None:
+                    logging.debug("No evaluation returned, stopping retrieval.")
+                    retrieval.done = True
+                else:
+                    summary = evaluation.summary
+                    if summary and summary.strip() != "":
+                        last_step.summary = summary
+                        
+                    last_step.results = evaluation.get_relevant_memories()
+                    
+                    # TODO: adjust weights of entities based on evaluation feedback
+                    # also consider adding new entities/keywords from evaluation
+                    if len(last_step.results) == 0:
+                        logging.debug("No relevant memories after evaluation, stopping retrieval.")
+                        retrieval.done = True
             
             current_step += 1
             self._update_progress(

@@ -8,6 +8,7 @@ class PipelineStatus(Enum):
     QUERY_UPDATE = "query_update"
     RETRIEVAL = "retrieval"
     RETRIEVAL_UPDATE = "retrieval_update"
+    EVALUATION = "evaluation"
     RESPONSE_GENERATION = "response_generation"
     ERROR = "error"
     COMPLETED = "completed"
