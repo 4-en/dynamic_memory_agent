@@ -606,6 +606,9 @@ class Pipeline:
                     if len(relevant_results) != 0 and evaluation.fully_answered:
                         logging.debug("Sufficient relevant memories found, stopping retrieval.")
                         retrieval.mark_satisfactory()
+                    elif len(relevant_results) == 0:
+                        logging.debug("No relevant memories found, stopping retrieval.")
+                        retrieval.done = True
             
             current_step += 1
             self._update_progress(

@@ -338,30 +338,47 @@ class Retrieval:
         if self.needs_clarification():
             return "Okay, the user's prompt seems a bit unclear. I should ask for clarification before proceeding. First, "
         
+        if len(self.steps) == 0:
+            return None
+        
         # count total memories in all steps
         total_memories = sum(len(step.results) for step in self.steps)
         
         if self.final_summary != "" and not force_new and self._last_summary_count == total_memories:
             return self.final_summary
         
-        summaries = [step.summary for step in self.steps if step.summary]
-        self.final_summary = "\n".join(summaries)
+        # check if we have any memories for the last step. If we don't, that means that we don't have any relevant information.
+        # in that case, we should instruct the model to refuse to answer and simply state that we have no relevant information.
+        last_step = self.steps[-1]
+        if len(last_step.results) == 0 and len(last_step.queries) > 0:
+            self.final_summary = (
+                "Okay, I was unable to find any of the required information in my memory. "
+                "In this case, I shouldn't make any assumptions or guesses, and instead clearly "
+                "state that I have no relevant information to answer the user's prompt."
+                "I have to make sure to not accidentally try to reply with made-up information, "
+                "which means that I should explicitly state that I have no relevant information."
+            )
+            self._last_summary_count = total_memories
+            return self.final_summary
         
-        if self.final_summary == "":
+
             
-            # TODO: if we have queries but no results, we should indicate that
-            # we shouldn't make guesses and instead say we have no information
-            
-            self.final_summary = "Okay, this is what I know:\n"
-            memory_summary = ""
-            for step in self.steps:
+        # TODO: if we have queries but no results, we should indicate that
+        # we shouldn't make guesses and instead say we have no information
+        
+        self.final_summary = "Okay, this is what I know:\n"
+        memory_summary = ""
+        for step in self.steps:
+            if step.summary:
+                memory_summary += f"{step.summary}\n"
+            else:
                 for result in step.results:
                     memory_summary += f"- {result.memory.memory}\n"
-            
-            if memory_summary == "":
-                return None
-            self.final_summary += memory_summary
-            self.final_summary += "\nI should use think about the relevant information and then respond accordingly."
+        
+        if memory_summary == "":
+            return None
+        self.final_summary += memory_summary
+        self.final_summary += "\nI should use think about the relevant information and then respond accordingly."
                     
         self._last_summary_count = total_memories
         
