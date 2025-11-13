@@ -255,7 +255,7 @@ class Retriever:
             age_factor = 1 - math.exp(-age / 5) # decays with age
             # scale up with count, but with diminishing returns
             #scale = (age_factor / math.exp(1-(1/count))) * (1-age_factor**5) + age_factor**6
-            scale = age_factor - age_factor / 15 * math.min(count-1, 10) * (1 - age_factor**4)
+            scale = age_factor - age_factor / 15 * min(count-1, 10) * (1 - age_factor**4)
             return scale
         
         scales = {}
