@@ -356,7 +356,9 @@ class Retrieval:
                 "In this case, I shouldn't make any assumptions or guesses, and instead clearly "
                 "state that I have no relevant information to answer the user's prompt."
                 "I have to make sure to not accidentally try to reply with made-up information, "
-                "which means that I should explicitly state that I have no relevant information."
+                "which means that I should explicitly state that I have no relevant information. "
+                "As a large language model, I can't be sure that I have access to all and especially the latest information, "
+                "so if I don't have relevant information in my memory, I must refuse to answer."
             )
             self._last_summary_count = total_memories
             return self.final_summary
