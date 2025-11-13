@@ -266,7 +266,7 @@ class Retriever:
         return scales
 
     
-    def give_memory_feedback(self, memory_ids: list[str], feedback: FeedbackType) -> bool:
+    def give_memory_feedback(self, memory_ids: list[str], feedback: FeedbackType, entities: list[str]=[])-> bool:
         """Provide feedback on specific memories.
         Positive feedback can be used to reinforce the relevance of certain memories,
         and links them together, while negative feedback can be used to de-prioritize certain memories.
@@ -277,10 +277,14 @@ class Retriever:
             The list of memory IDs to provide feedback on.
         feedback : FeedbackType
             The type of feedback to provide.
+        entities : list[str]
+            Optional list of entities related to the feedback.
+            This can be used to specifically adjust weights for certain entities.
         
         Returns
         -------
         bool
             True if the feedback was processed successfully, False otherwise.
         """
+        # TODO: implement feedback mechanism
         return False  # not implemented yet

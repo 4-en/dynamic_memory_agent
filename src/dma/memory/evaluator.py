@@ -69,7 +69,7 @@ Reasoning and summary about what kind of information we need and then the releva
         {
             "memory_id_int": <int>, # ID of the memory being evaluated from the list of provided memories
             "short_feedback_str": "<string>", # brief explanation of the relevance score
-            "memory_keywords_list": ["<string>", ...], # list of keywords the memory is about
+            "memory_keywords_list": ["<string>", ...], # list of keywords/entities that are relevant to both the memory and the query. Can include new ones not in the original memory metadata.
             "relevance_str": <string: "NONSENSE" | "IRRELEVANT" | "RELEVANT" | "PERFECT"> # relevance rating of the memory to the query. NONSENSE for information that doesn't make sense, IRRELEVANT for information that is unrelated, RELEVANT for information that is somewhat related and useful, PERFECT for information that directly answers the query
         },
         ...
@@ -307,7 +307,8 @@ class MemoryEvaluator:
         for i, mem in enumerate(memories):
             mem_dict = {
                 "memory_id_int": i + 1,  # make memory IDs 1-based
-                "content_str": mem.memory
+                "content_str": mem.memory,
+                "keywords_list": list(mem.entities.keys())
             }
             memories_data.append(mem_dict)
             

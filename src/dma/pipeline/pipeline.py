@@ -1,6 +1,6 @@
 from dma.core.conversation import Conversation
 from dma.core.message import Message, Role
-from dma.core.memory import Memory
+from dma.core.memory import Memory, FeedbackType
 from dma.core.retrieval import RetrievalStep, RetrievalQuery, Retrieval, MemoryResult
 from dma.config import DmaConfig, get_config
 
@@ -600,6 +600,13 @@ class Pipeline:
                             filtered_out_results.append(result)
                     last_step.results = relevant_results
                     last_step.rejected_results = filtered_out_results
+                    
+                    if relevant_results:
+                        # give positive feedback to retriever for relevant results
+                        self.retriever.give_memory_feedback(
+                            [result.memory.id for result in relevant_results],
+                            FeedbackType.POSITIVE
+                        )
                     
                     # TODO: adjust weights of entities based on evaluation feedback
                     # also consider adding new entities/keywords from evaluation
