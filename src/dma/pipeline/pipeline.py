@@ -589,16 +589,23 @@ class Pipeline:
                     if summary and summary.strip() != "":
                         last_step.summary = summary
                         
-                    last_step.results = evaluation.get_relevant_memories()
-                    for result in results:
-                        if result not in last_step.results:
-                            last_step.rejected_results.append(result)
+                    # filter results based on evaluation
+                    relevant_memories = evaluation.get_relevant_memories()
+                    relevant_results = []
+                    filtered_out_results = []
+                    for result in last_step.results:
+                        if result.memory in relevant_memories:
+                            relevant_results.append(result)
+                        else:
+                            filtered_out_results.append(result)
+                    last_step.results = relevant_results
+                    last_step.rejected_results = filtered_out_results
                     
                     # TODO: adjust weights of entities based on evaluation feedback
                     # also consider adding new entities/keywords from evaluation
-                    if len(last_step.results) == 0:
-                        logging.debug("No relevant memories after evaluation, stopping retrieval.")
-                        retrieval.done = True
+                    if len(relevant_results) != 0 and evaluation.fully_answered:
+                        logging.debug("Sufficient relevant memories found, stopping retrieval.")
+                        retrieval.mark_satisfactory()
             
             current_step += 1
             self._update_progress(

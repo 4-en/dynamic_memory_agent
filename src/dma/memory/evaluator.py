@@ -6,6 +6,7 @@ from dma.core import Memory, Retrieval, RetrievalStep, RetrievalQuery, EntityQue
 from dma.generator import BaseGenerator, LowLevelLlamaCppGenerator
 from enum import Enum
 import logging
+import json
 
 from dataclasses import dataclass, field
 
@@ -27,6 +28,7 @@ class EvaluationResult(BaseModel):
     evaluations_list: list[MemoryEvaluation] = Field(default_factory=list)
     summary_str: str = ""
     missing_keywords_list: list[str] = Field(default_factory=list)
+    fully_answered_bool: bool = False
     
 _example_json = """
 Example response (assuming the context is about "Zero-knowledge proof" in cryptography):
@@ -52,6 +54,8 @@ Example response (assuming the context is about "Zero-knowledge proof" in crypto
         }
     ],
     "summary_str": "In cryptography, a Zero-knowledge proof is a method by which one party can prove to another party that one statement is true, without conveying any information beyond the validity of the statement itself..."
+    "missing_keywords_list": [],
+    "fully_answered_bool": true
 }
 """
 
@@ -71,12 +75,15 @@ Reasoning and summary about what kind of information we need and then the releva
         ...
     ],
     "summary_str": "<string>", # summary of all the relevant information from the memories with relevance score 2 or 3, structured as a coherent explanation
-    "missing_keywords_list": ["<string>", ...] # (optional) list of important keywords or entities that were not found in any of the memories but are relevant to the query
+    "missing_keywords_list": ["<string>", ...], # (optional) list of important keywords or entities that were not found in any of the memories but are relevant to the query
+    "fully_answered_bool": <bool> # (optional) indicates if the query and user prompt has been fully answered based on the memories. If false, it means more information is needed.
 }
 """
 
 _instructions = """
 You are to evaluate the retrieved memories based on their relevance to a given query and conversation context.
+You will receive a conversation history between a user and an AI assistant, along with a set of queries used to retrieve memories.
+Your task is to analyze each memory in the context of the conversation and queries.
 Rate them based on how well they address the query and would be useful when replying to the user.
 Consider the following when evaluating:
 - Direct relevance to the query
@@ -84,6 +91,7 @@ Consider the following when evaluating:
 - Coherence and clarity of the memory content
 
 After the reasoning step (inside <think></think> tags), immediately provide the JSON response without any additional text.
+Make sure to strictly follow the specified JSON format.
 """
 
 @dataclass
@@ -92,6 +100,7 @@ class Evaluation:
     memories: list[Memory] = field(default_factory=list)
     ratings: list[MemoryRelevance] = field(default_factory=list)
     missing_keywords: list[str] = field(default_factory=list)
+    fully_answered: bool = False
     
     def get_relevant_memories(self, threshold: MemoryRelevance=MemoryRelevance.RELEVANT) -> list[Memory]:
         """
@@ -158,6 +167,8 @@ class MemoryEvaluator:
             logging.warning("No memories or queries to evaluate; returning empty evaluation.")
             return None
         
+        memories = [mem.memory for mem in memories]
+        
         prompt_conversation = self._build_prompt(memories, retrieval_step, conversation)
         
         reply_beginning = (
@@ -192,7 +203,7 @@ class MemoryEvaluator:
         Evaluation
             The parsed evaluation object.
         """
-        evaluations = result.evaluations
+        evaluations = result.evaluations_list
         memory_list = []
         scores = []
         
@@ -230,7 +241,8 @@ class MemoryEvaluator:
             summary=result.summary_str,
             memories=memory_list,
             ratings=scores,
-            missing_keywords=result.missing_keywords_list
+            missing_keywords=result.missing_keywords_list,
+            fully_answered=result.fully_answered_bool
         )
         return evaluation
         
@@ -259,40 +271,55 @@ class MemoryEvaluator:
         Conversation
             The constructed prompt conversation.
         """
-        # Build the prompt for evaluation
-        prompt = "Evaluate the following memories based on their relevance to the provided conversation and queries."
+        messages = []
         
-        # add the memories, conversation, and query to the prompt
-        memories_str = ""
-        for i, mem in enumerate(memories):
-            memories_str += f"Memory ID {i+1}:\n{mem.memory}\n\n"
-        prompt += f"\n\n## Memories:\n{memories_str}"
+        # add the system instructions
+        messages.append(Message(
+            role=Role.SYSTEM,
+            content=f"{_instructions}\n{_format_json}\n{_example_json}"
+        ))
+        
+        # add the conversation history
         
         LAST_N_CONVERSATION_MESSAGES = 10
         recent_conversation = conversation.messages[-LAST_N_CONVERSATION_MESSAGES:]
         conversation_str = ""
         for msg in recent_conversation:
-            conversation_str += f"{msg.role.value}: {msg.content}\n"
-        prompt += f"\n\n## Conversation Context:\n{conversation_str}"
+            if msg.role != Role.SYSTEM:
+                messages.append(msg)
         
-        query_str = ""
+        
+        # add the retrieval queries and memories as another user message in json format
+        queries_data = []
         for query in retrieval_step.queries:
             if query.embedding_query:
-                query_str += f"- {query.embedding_query.query_text}\n"
-
-        prompt += f"\n\n## Queries:\n{query_str}"
+                if query.embedding_query.query_text:
+                    q = {}
+                    q["query"] = query.embedding_query.query_text
+                    q["keywords"] = []
+                    if query.entity_queries:
+                        for e in query.entity_queries:
+                            q["keywords"].append(e.entity)
+                            
+                    queries_data.append(q)
         
-        prompt += "\n\nPlease provide your evaluation in the specified JSON format."
-        # Create the full prompt conversation
-        prompt_messages = [
-            Message(
-                role=Role.SYSTEM,
-                content=f"{_instructions}\n{_format_json}\n{_example_json}"
-            ),
-            Message(
-                role=Role.USER,
-                content=prompt
-            )
-        ]
+        memories_data = []
+        for i, mem in enumerate(memories):
+            mem_dict = {
+                "memory_id_int": i + 1,  # make memory IDs 1-based
+                "content_str": mem.memory
+            }
+            memories_data.append(mem_dict)
+            
+        parent = {
+            "queries": queries_data,
+            "memories": memories_data
+        }
         
-        return Conversation(messages=prompt_messages)
+        messages.append(Message(
+            role=Role.USER,
+            content=(f"Evaluate the following memories based on their relevance to the queries and the previous conversation context.\n"
+                     f"{json.dumps(parent, indent=4)}")
+        ))
+        
+        return Conversation(messages=messages)

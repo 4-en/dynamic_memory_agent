@@ -135,7 +135,7 @@ class LowLevelLlamaCppGenerator(BaseGenerator):
             if input_messages[-1]["content"].endswith("</think>"):
                 input_messages[-1]["content"] = input_messages[-1]["content"][:-len("</think>")]
                 
-            print(f"Continuing final assistant message: {input_messages[-1]['content']}")
+            # print(f"Continuing final assistant message: {input_messages[-1]['content']}")
                 
         input_str = self.tokenizer.apply_chat_template(
             input_messages,
@@ -470,7 +470,17 @@ class LowLevelLlamaCppGenerator(BaseGenerator):
         first_field = list(properties.keys())[0] if properties else None
         start_json = "{\n  "
         if first_field:
-            start_json += f'"{first_field}": "'
+            start_json += f'"{first_field}": '
+            # add the next char based on the type, ie " for str, [ for list, { for object, etc.
+            first_field_type = properties[first_field].get('type', 'string')
+            if first_field_type == 'string':
+                start_json += '"'
+            elif first_field_type == 'array':
+                start_json += '['
+            elif first_field_type == 'object':
+                start_json += '{'
+            else:
+                pass  # assume it's a number or boolean, no extra char needed
             
         last_think_open = message_str.rfind("<think>")
         last_think_close = message_str.rfind("</think>")
@@ -499,7 +509,7 @@ class LowLevelLlamaCppGenerator(BaseGenerator):
         while attempts < max_attempts:
             attempts += 1
             
-            print(f"Think content before JSON generation:\n{think_content}\n======================")
+            # print(f"Think content before JSON generation:\n{think_content}\n======================")
             
             json_prompt = message_str + think_content + start_json
             response = self.model(
@@ -516,7 +526,7 @@ class LowLevelLlamaCppGenerator(BaseGenerator):
             try:
                 message = self.convert_output_to_message(content, conversation)
                 
-                print(f"=== Generated message on attempt {attempts} ===\n{message.full_text}\n======================")
+                # print(f"=== Generated message on attempt {attempts} ===\n{message.full_text}\n======================")
                 # extract the json part from the message
                 message_json_str = message.message_text
                 json_start = message_json_str.find("{")

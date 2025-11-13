@@ -31,7 +31,7 @@ class QueryResponseModel(BaseModel):
     A QueryResponseModel represents the response from the query generator.
     It contains a list of ContextQuery objects.
     """
-    is_user_clarification_needed: bool = False
+    is_user_prompt_unclear: bool = False
     queries: list[ContextQuery] = Field(default_factory=list)
 
 class QueryGenerator:
@@ -182,8 +182,8 @@ class QueryGenerator:
         formats = (
             "The response should be a JSON object with the following structure:\n"
             "{\n"
-            "  \"is_user_clarification_needed\": bool, # true if the user's prompt is unclear and needs clarification, false otherwise\n"
-            "  \"queries\": [\n"
+            "  \"is_user_prompt_unclear\": bool, # true if the user's prompt is unclear/nonsense and needs clarification, false otherwise\n"
+            "  \"queries\": [ # a list of queries that will be used to find more relevant information to answer the user's prompt\n"
             "    {\n"
             "      \"query\": str, # a query in form of a question to retrieve relevant memories, as verbose as possible\n"
             "      \"topic\": str or null, # the topic or entity the query is focused on\n"
@@ -218,7 +218,7 @@ class QueryGenerator:
             "Previous retrieval: Memories related to project timelines and financial reports.\n"
             "Generated response:\n"
             "{\n"
-            "  \"is_userclarification_needed\": false,\n"
+            "  \"is_user_prompt_unclear\": false,\n"
             "  \"queries\": [\n"
             "    {\n"
             "      \"query\": \"What were the key points discussed about the EEG project MiniEEG in the meeting last week?\",\n"
@@ -364,7 +364,7 @@ class QueryGenerator:
         # Create a new retrieval step
         new_step = RetrievalStep(queries=[], results=[])
         new_step.reasoning = reasoning
-        new_step.clarification_needed = response.is_user_clarification_needed
+        new_step.clarification_needed = response.is_user_prompt_unclear
         
         if len(response.queries) == 0:
             # No queries generated
