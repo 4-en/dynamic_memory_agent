@@ -24,6 +24,30 @@ class Source:
         self.source = Source.normalize_source(self.source)
         # normalize publisher
         self.publisher = Source.normalize_source(self.publisher)
+        
+    def to_dict(self) -> dict:
+        return {
+            "source_type": self.source_type.value,
+            "full_source": self.full_source,
+            "source": self.source,
+            "authors": self.authors,
+            "publisher": self.publisher
+        }
+        
+    @staticmethod
+    def from_dict(data: dict) -> 'Source':
+        source_type = SourceType(data.get("source_type", "other"))
+        full_source = data.get("full_source", None)
+        source = data.get("source", None)
+        authors = data.get("authors", [])
+        publisher = data.get("publisher", None)
+        return Source(
+            source_type=source_type,
+            full_source=full_source,
+            source=source,
+            authors=authors,
+            publisher=publisher
+        )
     
     @staticmethod
     def normalize_authors(authors: list[str]) -> list[str]:

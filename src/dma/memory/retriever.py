@@ -350,7 +350,7 @@ class Retriever:
         # probably should have diminishing returns for multiple feedbacks on same memory/entity
         # something like 0 to 10 scale, with 1 as the base weight
         # for example, positive feedback diff could be 1.4^(-current_weight+1)
-        # and negative feedback diff could be -1.5^(current_weight)+0.8
+        # and negative feedback diff could be -(1.15^(current_weight)-0.9)
         # this would ensure that higher weights are harder to increase further,
         # and lower weights are harder to decrease further.
         # we could also add an adjustable scaling factor to control the impact of feedback

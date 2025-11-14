@@ -8,7 +8,7 @@ from .graph_result import GraphResult
 from dma.utils import embed_text
 
 from .graph_memory import GraphMemory
-from dma.core import Memory, FeedbackType, Source, SourceType, TimeRelevance
+from dma.core import Memory, FeedbackType, Source, SourceType, TimeRelevance, MemoryFeedback
 import os
 
 
@@ -839,6 +839,107 @@ class Neo4jMemory(GraphMemory):
         except Exception as e:
             logging.error(f"Error updating memory access: {e}")
             return []
+        
+    def _update_memory_weights(self, tx, feedback_dicts: list[dict]) -> None:
+        # for each entry in feedback dicts, do the following:
+        # find the memory by id
+        # update the access counts based on feedback
+        # for each entity in entities, update the MENTIONS relationship weight, or create it if it doesn't exist
+        # for positive, new_weight = old_weight + scale(1.4 ^ (-old_weight+1))
+        # for negative, new_weight = old_weight - scale(1.15 ^ old_weight - 0.9)
+        # prune if below threshold (e.g., 0.0)
+        # lastly, connect all positive memories together
+        query = """
+        UNWIND $feedbacks AS feedback
+        MATCH (m:Memory {id: feedback.memory_id})
+        // Update access counts based on feedback
+        SET m.total_access_count = coalesce(m.total_access_count, 0) + 1
+        // Update positive/negative counts
+        WITH m, feedback
+        CALL(m, feedback) {
+            WITH m, feedback
+            // Update counts based on feedback type
+            WHERE feedback.feedback > 0
+            SET m.positive_access_count = coalesce(m.positive_access_count, 0) + 1
+        }
+        CALL(m, feedback) {
+            WITH m, feedback
+            WHERE feedback.feedback < 0
+            SET m.negative_access_count = coalesce(m.negative_access_count, 0) + 1
+        }
+        
+        // Update MENTIONS relationship weights
+        WITH m, feedback
+        CALL(m, feedback) {
+            // for positive feedback
+            WITH m, feedback
+            WHERE feedback.feedback > 0
+            UNWIND feedback.entities AS entity_name
+            MERGE (e:Entity {name: entity_name})
+            MERGE (m)-[men:MENTIONS]->(e)
+            ON CREATE SET men.count = 1
+            // calculate new weight/count
+            WITH men, feedback
+            SET men.count = men.count + (1.4 ^ (-men.count + 1)) * feedback.feedback
+        }
+        CALL(m, feedback) {
+            // for negative feedback
+            WITH m, feedback
+            WHERE feedback.feedback < 0
+            UNWIND feedback.entities AS entity_name
+            MERGE (e:Entity {name: entity_name})
+            MERGE (m)-[men:MENTIONS]->(e)
+            ON CREATE SET men.count = 1
+            // calculate new weight/count
+            WITH men, feedback
+            SET men.count = men.count - (1.15 ^ men.count - 0.9) * abs(feedback.feedback)
+            
+            // prune if below threshold
+            WHERE men.count < 0.0
+            DELETE men
+        }
+        
+        // Connect all positively feedbacked memories together
+        WITH m, feedback
+        WHERE feedback.feedback > 0
+        COLLECT(m) AS positive_mems
+        CALL(positive_mems) {
+            WITH positive_mems
+            UNWIND range(0, size(positive_mems) - 2) AS idx
+            WITH positive_mems[idx] AS m1, positive_mems[idx + 1] AS m2
+            MERGE (m1)-[r:RELATED_TO]->(m2)
+                ON CREATE SET r.connection_strength = 1
+                ON MATCH SET r.connection_strength = r.connection_strength + 1
+        }
+        """
+        tx.run(query, feedbacks=feedback_dicts)
+        
+        
+        
+        
+    def update_memory_weights(self, feedbacks: list[MemoryFeedback]) -> bool:
+        # convert to list of dicts for neo4j
+        SCALE = 1.0
+        feedback_dicts = []
+        for feedback in feedbacks:
+            feedback_float = 0.0
+            if feedback.feedback == FeedbackType.POSITIVE:
+                feedback_float = SCALE
+            elif feedback.feedback == FeedbackType.NEGATIVE:
+                feedback_float = -SCALE
+            feedback_dicts.append({
+                'memory_id': feedback.memory_id,
+                'feedback': feedback_float,
+                'entities': feedback.entities
+            })
+            
+        try:
+            with self.driver.session(database=self.database) as session:
+                session.execute_write(self._update_memory_weights, feedback_dicts)
+            return True
+        except Exception as e:
+            logging.error(f"Error updating memory weights: {e}")
+            return False
         
     def _query_memory_series(self, tx, origin_memory_id: str, previous_n: int = 2, next_n: int = 2) -> list[Memory]:
         """

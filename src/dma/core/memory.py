@@ -280,6 +280,7 @@ class Memory:
                     occurrences += 1
                     i += 1
             occurrences = max(1, occurrences)
+            occurrences = min(occurrences, 3) # cap at 3 occurrences to avoid over-weighting
             self.entities[entity] = occurrences
 
         self.memory = memory
@@ -313,11 +314,19 @@ class Memory:
         """
 
         # convert the numpy array to a list
-        emb_accuracy = 5
+        emb_accuracy = 10
         if self.embedding is not None:
             embedding = [round(val, emb_accuracy) if emb_accuracy > 0 else val for val in self.embedding]
         else:
             embedding = None
+            
+        source = None
+        if self.source is not None:
+            source = self.source.to_dict()
+            
+        references = []
+        for ref in self.references:
+            references.append(ref.to_dict())
 
         return {
             "memory": self.memory,
@@ -325,12 +334,15 @@ class Memory:
             "topic": self.topic,
             "time_relevance": self.time_relevance.name,
             "truthfulness": self.truthfulness,
-            "memory_age": self.memory_time_point,
+            "memory_time_point": self.memory_time_point,
             "source": self.source,
+            "references": references,
+            "embedding": embedding,
             "creation_time": self.creation_time,
             "last_access": self.last_access,
             "total_access_count": self.total_access_count,
-            "embedding": embedding,
+            "positive_access_count": self.positive_access_count,
+            "negative_access_count": self.negative_access_count,
             "id": self.id
         }
         
@@ -339,24 +351,35 @@ class Memory:
         """
         Create a memory from a dictionary.
         """
-        if embedding is None:
-            embedding = memory_dict.get("embedding", None)
-            if embedding is not None:
-                embedding = np.array(embedding)
-
+        embedding = memory_dict.get("embedding", None)
+        if embedding is not None:
+            embedding = np.array(embedding)
+            
+            
+        source = memory_dict.get("source", None)
+        if source is not None:
+            source = Source.from_dict(source)
+            
+        references = []
+        for ref in memory_dict.get("references", []):
+            references.append(Source.from_dict(ref))
+            
         return Memory(
-            memory=memory_dict["memory"],
-            entities=memory_dict["entities"],
-            topic=memory_dict["topic"],
-            time_relevance=TimeRelevance[memory_dict["time_relevance"]],
-            truthfulness=memory_dict["truthfulness"],
-            memory_time_point=memory_dict["memory_age"],
-            source=memory_dict["source"],
+            memory=memory_dict.get("memory", ""),
+            entities=memory_dict.get("entities", {}),
+            topic=memory_dict.get("topic", None),
+            time_relevance=TimeRelevance.from_string(memory_dict.get("time_relevance", "ALWAYS")),
+            truthfulness=memory_dict.get("truthfulness", 1.0),
+            memory_time_point=memory_dict.get("memory_time_point", -1),
+            source=source,
+            references=references,
             embedding=embedding,
-            creation_time=memory_dict["creation_time"],
-            last_access=memory_dict["last_access"],
-            total_access_count=memory_dict["total_access_count"],
-            id=memory_dict["id"]
+            creation_time=memory_dict.get("creation_time", time_ms()),
+            last_access=memory_dict.get("last_access", time_ms()),
+            total_access_count=memory_dict.get("total_access_count", 0),
+            positive_access_count=memory_dict.get("positive_access_count", 0),
+            negative_access_count=memory_dict.get("negative_access_count", 0),
+            id=memory_dict.get("id", None)
         )
         
 

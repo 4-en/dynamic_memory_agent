@@ -1,8 +1,11 @@
 # converts articles to memories
 
 from dma.core import WebSourceData, Memory, Source
-from dma.utils import NER
+from dma.utils import NER, get_cache_dir
 import tqdm
+from pathlib import Path
+import urllib.parse
+import json
 
 from abc import ABC, abstractmethod
 from enum import Enum
@@ -26,6 +29,11 @@ class BasicMemoryConverter(MemoryConverter):
     
     Converts article into memories using a basic strategy.
     """
+    
+    def __init__(self):
+        super().__init__()
+        self.cache_dir = get_cache_dir() / "basic_memory_converter"
+        self.cache_dir.mkdir(parents=True, exist_ok=True)
 
     def _split_by_heading_heuristic(self, full_text):
         sections = {} # Use a dictionary to store sections by name
@@ -108,6 +116,39 @@ class BasicMemoryConverter(MemoryConverter):
                 continue
             filtered.append(chunk)
         return filtered
+    
+    def _get_memory_cache_path(self, article: WebSourceData) -> Path:
+        safe_title = urllib.parse.quote_plus(article.title)
+        return self.cache_dir / f"{safe_title}.json"
+    
+    def _get_cached_memories(self, article: WebSourceData) -> list[Memory] | None:
+        cache_path = self._get_memory_cache_path(article)
+        if cache_path and cache_path.exists():
+            try:
+                with open(cache_path, 'r', encoding='utf-8') as f:
+                    data = json.load(f)
+                memories = []
+                for mem_data in data.get("memories", []):
+                    mem = Memory.from_dict(mem_data)
+                    memories.append(mem)
+                return memories
+            except Exception as e:
+                print(f"Error loading cached memories for article '{article.title}': {e}")
+                return None
+        return None
+    
+    def _cache_memories(self, article: WebSourceData, memories: list[Memory]) -> None:
+        cache_path = self._get_memory_cache_path(article)
+        if not cache_path:
+            return
+        try:
+            data = {
+                "memories": [mem.to_dict() for mem in memories]
+            }
+            with open(cache_path, 'w', encoding='utf-8') as f:
+                json.dump(data, f, ensure_ascii=False, indent=4)
+        except Exception as e:
+            print(f"Error caching memories for article '{article.title}': {e}")
 
     def convert(self, articles: list[WebSourceData], verbose: bool=True, split_strategy: ArticleSplitStrategy=ArticleSplitStrategy.NONE, add_title_to_chunk: bool=False, **kwargs) -> list[Memory]:
         memories = []
@@ -120,6 +161,14 @@ class BasicMemoryConverter(MemoryConverter):
 
         iterator = tqdm.tqdm(articles, desc="Converting articles to memories") if verbose else articles
         for article in iterator:
+            
+            # try using cached version of article if available
+            if article.title:
+                cached_memories = self._get_cached_memories(article)
+                if cached_memories is not None:
+                    memories.extend(cached_memories)
+                    continue
+            
             source = Source.from_web(article.url)
             categories = article.categories if article.categories else []
             categories.append(article.title)
@@ -141,6 +190,8 @@ class BasicMemoryConverter(MemoryConverter):
             text_chunks = self._split_text(article.content_plaintext, split_strategy)
             text_chunks = self._filter_chunks(text_chunks)
             
+            cache_candidates = []
+            
             for chunk in text_chunks:
                 if add_title_to_chunk:
                     chunk = f"{article.title}\n\n{chunk}"
@@ -157,5 +208,9 @@ class BasicMemoryConverter(MemoryConverter):
                     new_memory.entities[category] += 1.0
 
                 memories.append(new_memory)
+                cache_candidates.append(new_memory)
+
+            if article.title and cache_candidates:
+                self._cache_memories(article, cache_candidates)
 
         return memories
