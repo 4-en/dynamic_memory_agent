@@ -49,27 +49,56 @@ class Neo4jMemory(GraphMemory):
         
         self._init_db()
         
-    def reset_database(self, CONFIRM_DELETE = False):
-        """Reset the graph database by deleting all nodes and relationships.
-        
-        Parameters
-        ----------
-        CONFIRM_DELETE : bool
-            Must be set to True to confirm deletion.
-        
-        Returns
-        -------
-        bool
-            True if the database was reset successfully, False otherwise.
+    def reset_database(self, CONFIRM_DELETE=False):
         """
+        Reset the graph database by deleting all nodes and relationships using
+        apoc.periodic.commit for memory-safe batching.
+        """
+        
         if not CONFIRM_DELETE:
             logging.warning("Database reset not confirmed. Set CONFIRM_DELETE=True to proceed.")
             return False
         
         try:
             with self.driver.session(database=self.database) as session:
-                session.run("MATCH (n) DETACH DELETE n")
-            logging.info("Database reset successfully.")
+                
+                # 1. Delete all relationships in batches
+                # This query repeatedly finds 50,000 relationships, deletes them,
+                # and commits. It continues until no relationships are found.
+                delete_rels_query = """
+                CALL apoc.periodic.commit(
+                'MATCH ()-[r]-() WITH r LIMIT $batchSize DELETE r RETURN count(r)',
+                {batchSize: 50000}
+                )
+                YIELD updates, batches
+                RETURN updates, batches
+                """
+                
+                # 2. Delete all nodes in batches (now that they are disconnected)
+                # This query repeatedly finds 50,000 nodes, deletes them,
+                # and commits. It continues until no nodes are found.
+                delete_nodes_query = """
+                CALL apoc.periodic.commit(
+                'MATCH (n) WITH n LIMIT $batchSize DELETE n RETURN count(n)',
+                {batchSize: 50000}
+                )
+                YIELD updates, batches
+                RETURN updates, batches
+                """
+
+                # Run the queries
+                rels_result = session.run(delete_rels_query).single()
+                nodes_result = session.run(delete_nodes_query).single()
+
+                logging.info(
+                    f"Database reset: Deleted {rels_result['updates']} relationships "
+                    f"in {rels_result['batches']} batches."
+                )
+                logging.info(
+                    f"Database reset: Deleted {nodes_result['updates']} nodes "
+                    f"in {nodes_result['batches']} batches."
+                )
+
             self._init_db()
             return True
         except Exception as e:
@@ -895,6 +924,7 @@ class Neo4jMemory(GraphMemory):
             SET men.count = men.count - (1.15 ^ men.count - 0.9) * abs(feedback.feedback)
             
             // prune if below threshold
+            WITH men
             WHERE men.count < 0.0
             DELETE men
         }
@@ -902,6 +932,7 @@ class Neo4jMemory(GraphMemory):
         // Connect all positively feedbacked memories together
         WITH m, feedback
         WHERE feedback.feedback > 0
+        WITH m
         COLLECT(m) AS positive_mems
         CALL(positive_mems) {
             WITH positive_mems

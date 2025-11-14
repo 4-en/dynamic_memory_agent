@@ -1,7 +1,10 @@
 from dma.memory.graph import Neo4jMemory
-from dma.core import Memory, TimeRelevance, Source, FeedbackType
+from dma.core import Memory, TimeRelevance, Source, FeedbackType, MemoryFeedback
 import time
 import random
+import logging
+
+logging.basicConfig(level=logging.INFO)
 
 def assert_verbose(**kwargs):
     # Simple helper function to assert with verbose output
@@ -22,7 +25,8 @@ db = Neo4jMemory()
 
 assert_verbose(connected=db.is_connected())
 
-db.reset_database(CONFIRM_DELETE=True)
+res = db.reset_database(CONFIRM_DELETE=True)
+assert_verbose(database_reset=res)
 
 memories = []
 sample_texts = [
@@ -136,4 +140,15 @@ assert_verbose(traversal_results=len(res), expected_n=2)  # should find two rela
 expected_scores = {1/2, 1/3}
 retrieved_scores = {gr.score for gr in res}
 assert_verbose(traversal_scores_match=retrieved_scores == expected_scores)
+
+# test updating memory weights
+feedbacks = [
+    MemoryFeedback(memory_id=memory_sequence[0].id, feedback=FeedbackType.POSITIVE, entities=["senko-san", "TEST_A"]),
+    MemoryFeedback(memory_id=memory_sequence[1].id, feedback=FeedbackType.NEGATIVE, entities=["senko-san", "TEST_B"]),
+    MemoryFeedback(memory_id=memory_sequence[2].id, feedback=FeedbackType.POSITIVE, entities=["senko-san", "TEST_C"]),
+    MemoryFeedback(memory_id=memory_sequence[3].id, feedback=FeedbackType.NEUTRAL, entities=["yuzu", "TEST_D"])
+]
+res = db.update_memory_weights(feedbacks)
+assert_verbose(weights_updated=res)
+
 print("All tests passed successfully.")
