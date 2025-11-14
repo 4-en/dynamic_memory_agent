@@ -4,6 +4,7 @@ from pydantic import BaseModel, Field
 
 from dma.core import Memory, Retrieval, RetrievalStep, RetrievalQuery, EntityQuery, EmbeddingQuery, Message, Conversation, Role
 from dma.generator import BaseGenerator, LowLevelLlamaCppGenerator
+from dma.utils import NER
 from enum import Enum
 import logging
 import json
@@ -96,9 +97,30 @@ Make sure to strictly follow the specified JSON format.
 
 @dataclass
 class Evaluation:
+    """
+    Represents the evaluation of memories with relevance scores and summary.
+    
+    Attributes
+    ----------
+    summary : str
+        Summary of relevant information from the memories.
+    memories : list[Memory]
+        List of evaluated memories.
+    ratings : list[MemoryRelevance]
+        Corresponding relevance ratings for each memory.
+    memory_keywords : list[list[str]]
+        List of keywords/entities for each memory that are relevant to the query.
+    missing_keywords : list[str]
+        List of important keywords/entities missing from the memories.
+    fully_answered : bool
+        Indicates if the query has been fully answered based on the memories.
+    """
+    
+    
     summary: str = ""
     memories: list[Memory] = field(default_factory=list)
     ratings: list[MemoryRelevance] = field(default_factory=list)
+    memory_keywords: list[list[str]] = field(default_factory=list)
     missing_keywords: list[str] = field(default_factory=list)
     fully_answered: bool = False
     
@@ -206,6 +228,7 @@ class MemoryEvaluator:
         evaluations = result.evaluations_list
         memory_list = []
         scores = []
+        keywords_list = []
         
         for e in evaluations:
             mem_id = e.memory_id_int - 1  # assuming memory IDs are 1-based
@@ -228,6 +251,7 @@ class MemoryEvaluator:
                 mem_relevance = MemoryRelevance.UNKNOWN
             memory_list.append(memories[mem_id])
             scores.append(mem_relevance)
+            keywords_list.append([NER.normalize_entity(kw) for kw in e.memory_keywords_list])
             
         if len(memory_list) != len(memories):
             logging.warning("Some memories were missing in the evaluation result; assigning UNKNOWN relevance to them.")
@@ -236,11 +260,13 @@ class MemoryEvaluator:
                 if mem not in memory_list:
                     memory_list.append(mem)
                     scores.append(MemoryRelevance.UNKNOWN)
+                    keywords_list.append([])
             
         evaluation = Evaluation(
             summary=result.summary_str,
             memories=memory_list,
             ratings=scores,
+            memory_keywords=keywords_list,
             missing_keywords=result.missing_keywords_list,
             fully_answered=result.fully_answered_bool
         )

@@ -601,12 +601,10 @@ class Pipeline:
                     last_step.results = relevant_results
                     last_step.rejected_results = filtered_out_results
                     
-                    if relevant_results:
-                        # give positive feedback to retriever for relevant results
-                        self.retriever.give_memory_feedback(
-                            [result.memory.id for result in relevant_results],
-                            FeedbackType.POSITIVE
-                        )
+                    self.retriever.give_query_feedback(
+                        last_step,
+                        evaluation
+                    )
                     
                     # TODO: adjust weights of entities based on evaluation feedback
                     # also consider adding new entities/keywords from evaluation

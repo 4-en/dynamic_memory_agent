@@ -1,9 +1,10 @@
 from dma.core import RetrievalStep, EntityQuery, EmbeddingQuery, RetrievalQuery, Retrieval
 from dma.core import Conversation, Message, Role
-from dma.core import Memory, MemoryResult, FeedbackType
+from dma.core import Memory, MemoryResult, FeedbackType, MemoryFeedback
 from dma.utils import cosine_similarity
 
 from .graph import Neo4jMemory, GraphMemory, GraphResult
+from .evaluator import Evaluation, MemoryRelevance
 import math
 
 from dma.config.dma_config import get_config
@@ -264,6 +265,58 @@ class Retriever:
             scales[entity] = scale_formula(data['count'], data['age'])
 
         return scales
+    
+    def give_query_feedback(self, step: RetrievalStep, evaluation: Evaluation)-> bool:
+        """Provide feedback on a retrieval step based on its evaluation.
+        
+        Parameters
+        ----------
+        step : RetrievalStep
+            The retrieval step that was evaluated.
+        evaluation : Evaluation
+            The evaluation from the Evaluator.
+        
+        Returns
+        -------
+        bool
+            True if the feedback was processed successfully, False otherwise.
+        """
+        query_entities = set() # collection of entities that were used in the query
+        for q in step.queries:
+            if q.entity_queries:
+                for entity_query in q.entity_queries:
+                    query_entities.add(entity_query.entity)
+                    
+        feedbacks = []
+        for memory, relevance, entities in zip(evaluation.memories, evaluation.ratings, evaluation.memory_keywords):
+            # collect union of query entities and memory entities, then add any keywords from evaluation
+            related_entities = set(memory.entities.keys()).union(query_entities)
+            for kw in entities:
+                related_entities.add(kw)
+                
+            feedback = FeedbackType.NEUTRAL
+            # map relevance to feedback type
+            match relevance:
+                case MemoryRelevance.PERFECT | MemoryRelevance.RELEVANT:
+                    feedback = FeedbackType.POSITIVE
+                case MemoryRelevance.IRRELEVANT | MemoryRelevance.NONSENSE:
+                    feedback = FeedbackType.NEGATIVE
+                case _:
+                    # for UNKNOWN or other cases, keep neutral
+                    feedback = FeedbackType.NEUTRAL
+            
+            feedbacks.append(
+                MemoryFeedback(
+                    memory_id=memory.id,
+                    feedback=feedback,
+                    entities=list(related_entities)
+                )
+            )
+            
+        return True  # temporarily disable feedback processing
+            
+        res = self.graph_memory.update_memory_weights(feedbacks)
+        return res
 
     
     def give_memory_feedback(self, memory_ids: list[str], feedback: FeedbackType, entities: list[str]=[])-> bool:

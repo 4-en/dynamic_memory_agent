@@ -1,2 +1,2 @@
 from .retriever import Retriever
-from .evaluator import MemoryEvaluator, Evaluation
+from .evaluator import MemoryEvaluator, Evaluation, MemoryRelevance

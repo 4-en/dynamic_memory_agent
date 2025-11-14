@@ -188,6 +188,25 @@ class FeedbackType(Enum):
     POSITIVE = 1
     NEGATIVE = -1
     NEUTRAL = 0
+    
+@dataclass
+class MemoryFeedback:
+    """A class to represent feedback on a memory.
+    
+    Attributes
+    ----------
+    memory_id : str
+        The ID of the memory.
+    feedback : FeedbackType
+        The type of feedback.
+    entities : list[str]
+        The entities related to the feedback.
+        The weight of these entities will be asjusted based on the feedback type.
+    """
+    
+    memory_id: str
+    feedback: FeedbackType
+    entities: list[str] = field(default_factory=list)
 
 @dataclass
 class Memory:

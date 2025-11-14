@@ -1,6 +1,6 @@
 
 from abc import ABC, abstractmethod
-from dma.core.memory import Memory, FeedbackType
+from dma.core.memory import Memory, FeedbackType, MemoryFeedback
 from .graph_result import GraphResult
 
 class GraphMemory(ABC):
@@ -203,6 +203,23 @@ class GraphMemory(ABC):
         -------
         list[str]
             The list of memory IDs that were successfully updated.
+        """
+        pass
+    
+    @abstractmethod
+    def update_memory_weights(self, memory_feedbacks: list[MemoryFeedback]) -> bool:
+        """
+        Update the weights of memories based on feedback.
+
+        Parameters
+        ----------
+        memory_feedbacks : list[MemoryFeedback]
+            The list of MemoryFeedback objects containing memory IDs and feedback types.
+
+        Returns
+        -------
+        bool
+            True if the weights were updated successfully, False otherwise.
         """
         pass
     
