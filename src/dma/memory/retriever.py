@@ -313,8 +313,6 @@ class Retriever:
                 )
             )
             
-        return True  # temporarily disable feedback processing
-            
         res = self.graph_memory.update_memory_weights(feedbacks)
         return res
 

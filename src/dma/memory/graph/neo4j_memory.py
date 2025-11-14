@@ -932,8 +932,7 @@ class Neo4jMemory(GraphMemory):
         // Connect all positively feedbacked memories together
         WITH m, feedback
         WHERE feedback.feedback > 0
-        WITH m
-        COLLECT(m) AS positive_mems
+        WITH COLLECT(m) AS positive_mems
         CALL(positive_mems) {
             WITH positive_mems
             UNWIND range(0, size(positive_mems) - 2) AS idx
