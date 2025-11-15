@@ -9,6 +9,7 @@ class PipelineStatus(Enum):
     RETRIEVAL = "retrieval"
     RETRIEVAL_UPDATE = "retrieval_update"
     EVALUATION = "evaluation"
+    MEMORY_UPDATE = "memory_update"
     RESPONSE_GENERATION = "response_generation"
     ERROR = "error"
     COMPLETED = "completed"

@@ -606,6 +606,15 @@ class Pipeline:
                         evaluation
                     )
                     
+                    # update progress with feedback data
+                    self._update_progress(
+                        progress_callback,
+                        PipelineStatus.MEMORY_UPDATE,
+                        f"Memory reinforcement completed. (+{len(relevant_results)} relevant, -{len(filtered_out_results)} irrelevant)",
+                        current_step / total_steps,
+                        retrieval_step=last_step
+                    )
+                    
 
                     if len(relevant_results) != 0 and evaluation.fully_answered:
                         logging.debug("Sufficient relevant memories found, stopping retrieval.")
