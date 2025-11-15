@@ -4,6 +4,7 @@ from dma.core import WebSourceData, Memory, Source
 from dma.utils import NER, get_cache_dir
 import tqdm
 from pathlib import Path
+import os
 import urllib.parse
 import json
 
@@ -157,17 +158,23 @@ class BasicMemoryConverter(MemoryConverter):
         for article in articles:
             if article.url and article.title:
                 name_to_src[article.title] = Source.from_web(article.url)
-            
+                
+        # load cached file names for faster lookup
+        cached_files = set(os.listdir(self.cache_dir)) if self.cache_dir.exists() else set()
+        
 
         iterator = tqdm.tqdm(articles, desc="Converting articles to memories") if verbose else articles
         for article in iterator:
             
             # try using cached version of article if available
             if article.title:
-                cached_memories = self._get_cached_memories(article)
-                if cached_memories is not None:
-                    memories.extend(cached_memories)
-                    continue
+                safe_title = urllib.parse.quote_plus(article.title)
+                cache_filename = f"{safe_title}.json"
+                if cache_filename in cached_files:
+                    cached_memories = self._get_cached_memories(article)
+                    if cached_memories is not None:
+                        memories.extend(cached_memories)
+                        continue
             
             source = Source.from_web(article.url)
             categories = article.categories if article.categories else []
