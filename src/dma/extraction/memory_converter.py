@@ -177,7 +177,12 @@ class BasicMemoryConverter(MemoryConverter):
                         continue
             
             source = Source.from_web(article.url)
-            categories = article.categories if article.categories else []
+            # categories = article.categories if article.categories else []
+            # removed category extraction for now, since they contain too
+            # many non-useful categories and meta categories, which add unwanted noise
+            # and bloat the entity connections
+            # we can re-add this later with a better mechanism for filtering useful categories
+            categories = []
             categories.append(article.title)
             # clean categories to be just the title strings
             for i in range(len(categories)):

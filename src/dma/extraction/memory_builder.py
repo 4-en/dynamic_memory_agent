@@ -25,7 +25,7 @@ class MemoryBuilder:
         memories = self.converter.convert(articles, verbose=True, split_strategy=ArticleSplitStrategy.PARAGRAPH, add_title_to_chunk=True)
         
         # add in batch to retriever
-        BATCH_SIZE = 25
+        BATCH_SIZE = 100
         print(f"Adding {len(memories)} memories to retriever in batches of {BATCH_SIZE}...")
         for i in tqdm.tqdm(range(0, len(memories), BATCH_SIZE), desc="Adding memories to retriever"):
             batch = memories[i:i+BATCH_SIZE]
