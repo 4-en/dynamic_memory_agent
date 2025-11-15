@@ -606,8 +606,7 @@ class Pipeline:
                         evaluation
                     )
                     
-                    # TODO: adjust weights of entities based on evaluation feedback
-                    # also consider adding new entities/keywords from evaluation
+
                     if len(relevant_results) != 0 and evaluation.fully_answered:
                         logging.debug("Sufficient relevant memories found, stopping retrieval.")
                         retrieval.mark_satisfactory()
