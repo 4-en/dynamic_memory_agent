@@ -314,9 +314,8 @@ class Memory:
         """
 
         # convert the numpy array to a list
-        emb_accuracy = 10
         if self.embedding is not None:
-            embedding = [round(val, emb_accuracy) if emb_accuracy > 0 else val for val in self.embedding]
+            embedding = [float(val) for val in self.embedding]
         else:
             embedding = None
             
@@ -335,7 +334,7 @@ class Memory:
             "time_relevance": self.time_relevance.name,
             "truthfulness": self.truthfulness,
             "memory_time_point": self.memory_time_point,
-            "source": self.source,
+            "source": source,
             "references": references,
             "embedding": embedding,
             "creation_time": self.creation_time,
