@@ -6,6 +6,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Dynamic Memory Demo</title>
     <link rel="stylesheet" href="/static/style.css">
+    <link rel="stylesheet" href="/static/toggle.css">
     <script defer src="https://cdn.jsdelivr.net/npm/mathjax@4/tex-mml-chtml.js"></script>
 </head>
 
@@ -25,7 +26,7 @@
 
 
     <div class="header-bar">
-        <button id="theme-toggle" title="Toggle dark/light mode">
+        <button id="theme-toggle" class="navbar-icon" title="Toggle dark/light mode">
             <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none"
                 stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
                 class="icon icon-moon">
@@ -45,7 +46,76 @@
                 <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
             </svg>
         </button>
+        <button id="info-toggle" class="navbar-icon" title="Info">
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none"
+                stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+                class="icon icon-info">
+                <circle cx="12" cy="12" r="10"></circle>
+                <line x1="12" y1="16" x2="12" y2="12"></line>
+                <line x1="12" y1="8" x2="12.01" y2="8"></line>
+            </svg>
+        </button>
+        <button id="settings-toggle" class="navbar-icon" title="Settings">
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none"
+                stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+                class="icon icon-settings">
+                <circle cx="12" cy="12" r="3"></circle>
+                <path
+                    d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z">
+                </path>
+            </svg>
+        </button>
     </div>
+
+    <dialog id="settings-modal" class="settings-modal">
+        <form method="dialog" class="settings-form">
+            <button id="close-settings" type="submit" class="navbar-icon modal-close-button" title="Close">
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none"
+                    stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+                    class="icon icon-close">
+                    <line x1="18" y1="6" x2="6" y2="18"></line>
+                    <line x1="6" y1="6" x2="18" y2="18"></line>
+                </svg>
+            </button>
+            <h2>Settings</h2>
+            <div id="settings-container">
+                <!-- Settings will be dynamically added here -->
+            </div>
+        </form>
+    </dialog>
+    <dialog id="info-modal" class="settings-modal">
+        <form method="dialog" class="settings-form">
+            <button id="close-info" type="submit" class="navbar-icon modal-close-button" title="Close">
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none"
+                    stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+                    class="icon icon-close">
+                    <line x1="18" y1="6" x2="6" y2="18"></line>
+                    <line x1="6" y1="6" x2="18" y2="18"></line>
+                </svg>
+            </button>
+            <h2>About This Demo</h2>
+            <p>This is a demo of the Dynamic Memory Agent, a system that uses a language model together 
+                with a dynamic, context-aware graph memory to answer questions.</p>
+            <p>The demo is set up to contain knowledge about a specific topic, for which it can answer 
+                questions using its memory to provide contextually relevant information.</p>
+            <p>The system uses an open source language model that can run on consumer hardware, while using the memory
+                to enhance its capabilities in order to rival much larger and more resource-intensive models.</p>
+            
+            <h3>Configuration</h3>
+            <ul>
+                <li>Language Model: Qwen3-8B-Q4_K_M</li>
+                <li>Database: Neo4j Graph Database</li>
+                <li>Current Memory Topic: Solar System</li>
+            </ul>
+            <h3>System</h3>
+            <ul>
+                <li>GPU: NVIDIA RTX 3090 (24GB)</li>
+                <li>CPU: Intel Core i7 13700K</li>
+                <li>RAM: 64GB DDR4</li>
+            </ul>
+        </form>
+    </dialog>
+    <script src="/static/settings.js"></script>
 
     <div class="chat-container">
 
