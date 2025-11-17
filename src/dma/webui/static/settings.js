@@ -143,7 +143,23 @@ function toggle_hide_message_type(message_type, hide) {
 }
 
 window.addEventListener('load', () => {
-    // Example usage:
+    
+    // toggle multi response mode (display responses from multiple models side by side)
+    add_settings_toggle(
+        'multi_response_mode',
+        'Enable Multi-Response Mode',
+        false,
+        'Display responses from multiple models side by side in the chat',
+        (enabled) => {
+            const messageList = document.getElementById('message-list');
+            if (enabled) {
+                messageList.classList.add('multi-response-mode');
+            } else {
+                messageList.classList.remove('multi-response-mode');
+            }
+        }
+    );
+
     const darkModeToggle = add_settings_toggle(
         'dark_mode',
         'Enable Dark Mode',
@@ -247,13 +263,26 @@ window.addEventListener('load', () => {
         'Clear Messages',
         () => {
             if (confirm('Are you sure you want to clear all messages? This action cannot be undone.')) {
+                const token = localStorage.getItem('user_token');
+                if (!token) {
+                    alert('No user token found. Cannot clear messages on server.');
+                    return;
+                }
                 // Clear local storage
                 localStorage.removeItem('chat_messages');
                 // Send request to server to clear messages
-                fetch('/clear_messages', { method: 'POST' })
+                fetch('/api/clear_history', { 
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ user_token: token })
+                })
+
                     .then(response => {
                         if (response.ok) {
                             // Reload the page to reflect changes
+                            localStorage.removeItem('user_token');
                             window.location.reload();
                         } else {
                             alert('Failed to clear messages on the server.');
@@ -264,16 +293,6 @@ window.addEventListener('load', () => {
                         alert('An error occurred while clearing messages.');
                     });
             }
-        }
-    );
-
-    // feedback button
-    add_settings_button(
-        'Send Feedback',
-        'Send feedback about the application',
-        'Feedback',
-        () => {
-            window.open('https://example.com/feedback');
         }
     );
 });

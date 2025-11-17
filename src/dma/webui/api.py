@@ -31,6 +31,9 @@ class ChatRequest(BaseModel):
     def to_message(self) -> Message:
         return Message(role=Role.USER, content=self.message)
     
+class UserAuthRequest(BaseModel):
+    user_token: str
+    
 class HistoryRequest(BaseModel):
     user_token: str | None = None
     
@@ -70,6 +73,7 @@ class DMAWebUI:
         # --- Connect API Endpoints ---
 
         self.app.post("/api/history", response_model=list[ChatMessage])(self.get_history)
+        self.app.post("/api/clear_history")(self.clear_history)
         self.app.post("/api/chat")(self.chat)
         self.app.get("/", response_class=FileResponse)(self.get_index)
         
@@ -89,6 +93,14 @@ class DMAWebUI:
         return [
             ChatMessage.from_message(msg) for msg in self.get_conversation(request.user_token).messages if msg.role in [Role.USER, Role.ASSISTANT] and msg.message_text
         ]
+        
+    async def clear_history(self, request: UserAuthRequest):
+        """
+        Clears the chat history for the given user token.
+        """
+        if request.user_token in self._conversations:
+            del self._conversations[request.user_token]
+        return {"status": "success"}
 
             
     def convert_pipeline_update(self, update: PipelineUpdate)->str:
