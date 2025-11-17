@@ -137,7 +137,7 @@ class DMAWebUI:
                         if step is None or len(step.queries) == 0:
                             continue
                         
-                        if step.clarification_needed:
+                        if step.clarification_needed and len(step.queries) == 0:
                             yield StreamingResponseChunk(
                                 type="query",
                                 content="User clarification needed."

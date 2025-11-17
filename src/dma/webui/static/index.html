@@ -119,8 +119,17 @@
 
     <div class="chat-container">
 
-
-        <div id="message-list" class="message-list"></div>
+        <div id="multi-message-list">
+            <div class="message-list-container" id="message-list-container-2">
+                <span id="model-label-2" class="model-label">Model 2</span>
+                <div id="message-list-2" class="message-list"></div></div>
+            <div class="message-list-container">
+                <span id="model-label-1" class="model-label">DynMem</span>
+                <div id="message-list" class="message-list"></div></div>
+            <div class="message-list-container" id="message-list-container-3">
+                <span id="model-label-3" class="model-label">Model 3</span>
+                <div id="message-list-3" class="message-list"></div></div>
+        </div>
 
         <form id="chat-form" class="chat-form">
             <textarea id="message-input" placeholder="Type your message..." autocomplete="off" required></textarea>

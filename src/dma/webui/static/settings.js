@@ -42,6 +42,8 @@ function add_settings_toggle(key, label, default_value, hover_text, on_change) {
 
 
 
+
+
     const container = document.getElementById('settings-container');
 
     const label_elem = document.createElement('label');
@@ -79,6 +81,11 @@ function add_settings_toggle(key, label, default_value, hover_text, on_change) {
             on_change(input_elem.checked, setting_container);
         }
     });
+
+    // fire on_change initially to set the correct state
+    if (on_change) {
+        on_change(start_value === 'true' || start_value === true, setting_container);
+    }
 
     return setting_container;
 
@@ -134,9 +141,9 @@ function add_settings_button(label, hover_text, button_text, on_click) {
 }
 
 function toggle_hide_message_type(message_type, hide) {
-    const messageList = document.getElementById('message-list');
+    const multiMessageList = document.getElementById('multi-message-list');
     if (hide) {
-        messageList.classList.add(`hide-${message_type}`);
+        multiMessageList.classList.add(`hide-${message_type}`);
     } else {
         messageList.classList.remove(`hide-${message_type}`);
     }
@@ -151,11 +158,11 @@ window.addEventListener('load', () => {
         false,
         'Display responses from multiple models side by side in the chat',
         (enabled) => {
-            const messageList = document.getElementById('message-list');
+            const multiMessageList = document.getElementById('multi-message-list');
             if (enabled) {
-                messageList.classList.add('multi-response-mode');
+                multiMessageList.classList.add('multi-response-mode');
             } else {
-                messageList.classList.remove('multi-response-mode');
+                multiMessageList.classList.remove('multi-response-mode');
             }
         }
     );

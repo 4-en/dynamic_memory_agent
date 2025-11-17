@@ -58,7 +58,6 @@ body {
 /* --- Main Chat Container --- */
 .chat-container {
     width: 100%;
-    max-width: 800px; 
     /* fill available height minus some margin */
     height: calc(100vh - 40px);
     background-color: var(--chat-container-bg);
@@ -181,14 +180,77 @@ html:not(.dark-mode) .icon-sun {
     background-color: var(--button-hover-bg);
 }
 
+#multi-message-list {
+    flex-grow: 1;
+    display: flex;
+    flex-direction: row;
+    gap: 10px;
+    margin: 0;
+    padding: 0;
+    align-items: stretch;
+    justify-content: center;
+    overflow: hidden;
+    min-height: 0;
+}
+
+@media screen and (max-width: 900px) {
+    #multi-message-list {
+        flex-direction: column;
+    }
+}
+
 /* --- Message List Area --- */
 .message-list {
-    flex-grow: 1;
-    overflow-y: auto;
+    flex: 1 1 auto;
     padding: 20px;
     display: flex;
     flex-direction: column;
     gap: 15px;
+    align-items: start;
+    width: 100%;
+    max-width: 800px;
+    box-sizing: border-box;
+    min-height: 0;
+    overflow-y: auto;
+}
+
+.message-list-container {
+    display: flex;
+    flex-direction: column;
+    padding: 0;
+    margin: 0;
+    flex-grow: 1;
+    align-items: start;
+    justify-content: center;
+    width: 100%;
+    max-width: 800px;
+    height: 100%;
+    box-sizing: border-box;
+}
+
+#message-list-container-2, #message-list-container-3 {
+    display: none;
+    margin-left: 20px;
+    margin-right: 20px;
+}
+.multi-response-mode #message-list-container-2 {
+    display: flex;
+}
+
+.multi-response-mode #message-list-container-3 {
+    display: flex;
+}
+
+.model-label {
+    display: none;
+    font-size: 0.85em;
+    color: var(--icon-color);
+    margin-bottom: 4px;
+    align-self: center;
+}
+
+.multi-response-mode .model-label {
+    display: block;
 }
 
 /* --- Individual Messages --- */
@@ -243,7 +305,7 @@ html:not(.dark-mode) .icon-sun {
     max-width: 70%;
 }
 
-.message-list.hide-thoughts .assistant-message.thought-message {
+.hide-thoughts .assistant-message.thought-message {
     display: none;
 }
 
@@ -258,7 +320,7 @@ html:not(.dark-mode) .icon-sun {
     max-width: 70%;
 }
 
-.message-list.hide-queries .assistant-message.query-message {
+.hide-queries .assistant-message.query-message {
     display: none;
 }
 
@@ -273,7 +335,7 @@ html:not(.dark-mode) .icon-sun {
     max-width: 70%;
 }
 
-.message-list.hide-retrievals .assistant-message.retrieval-message {
+.hide-retrievals .assistant-message.retrieval-message {
     display: none;
 }
 
@@ -288,7 +350,7 @@ html:not(.dark-mode) .icon-sun {
     max-width: 70%;
 }
 
-.message-list.hide-summaries .assistant-message.summary-message {
+.hide-summaries .assistant-message.summary-message {
     display: none;
 }
 
@@ -303,7 +365,7 @@ html:not(.dark-mode) .icon-sun {
     max-width: 70%;
 }
 
-.message-list.hide-feedback-updates .assistant-message.feedback-update-message {
+.hide-feedback-updates .assistant-message.feedback-update-message {
     display: none;
 }
 
@@ -320,7 +382,7 @@ html:not(.dark-mode) .icon-sun {
     align-self: center;
 }
 
-.message-list.hide-status .assistant-message.status-message {
+.hide-status .assistant-message.status-message {
     display: none;
 }
 
@@ -341,7 +403,7 @@ html:not(.dark-mode) .icon-sun {
     border: 1px solid #f5c6cb;
 }
 
-.message-list.hide-info .info-message {
+.hide-info .info-message {
     display: none;
 }
 
@@ -357,6 +419,9 @@ html:not(.dark-mode) .icon-sun {
     flex-direction: row;
     justify-content: space-between;
     align-items: center;
+    width: 90%;
+    max-width: 800px;
+    align-self: center;
 }
 
 #message-input {
