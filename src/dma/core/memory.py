@@ -59,7 +59,12 @@ class TimeRelevance(Enum):
     def from_string(time_relevance: str) -> 'TimeRelevance':
         """
         Get the TimeRelevance enum from a string.
+        
+        Always safe to use, will return TimeRelevance.UNKNOWN for unknown strings or types.
         """
+        if not isinstance(time_relevance, str):
+            return TimeRelevance.UNKNOWN
+        
         time_relevance = time_relevance.upper()
         if time_relevance == "UNKNOWN":
             return TimeRelevance.UNKNOWN

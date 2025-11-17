@@ -23,8 +23,8 @@ class ContextQuery(BaseModel):
     query: str # a query in form of a question to retrieve relevant memories
     topic: str = None # the topic or entity the query is focused on
     entities: list[str] = Field(default_factory=list) # a list of named entities, such as people, places
-    time_relevance: str = "UNKNOWN" # a time frame the query is focused on, one of ['UNKNOWN', 'DAY', 'WEEK', 'MONTH', 'YEAR', 'DECADE', 'CENTURY', 'ALWAYS']
-    time_point: str = "UNKNOWN" # a specific time point or period the query is focused on
+    time_relevance: str | None = "UNKNOWN" # a time frame the query is focused on, one of ['UNKNOWN', 'DAY', 'WEEK', 'MONTH', 'YEAR', 'DECADE', 'CENTURY', 'ALWAYS']
+    time_point: str | None = "UNKNOWN" # a specific time point or period the query is focused on
     
 class QueryResponseModel(BaseModel):
     """

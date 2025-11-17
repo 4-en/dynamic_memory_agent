@@ -1,5 +1,9 @@
 const themeToggle = document.getElementById('theme-toggle');
 const messageList = document.getElementById('message-list');
+const messageListAlt1 = document.getElementById('message-list-2');
+const messageListAlt2 = document.getElementById('message-list-3');
+const messageListAlt1Label = document.getElementById('model-label-2');
+const messageListAlt2Label = document.getElementById('model-label-3');
 const chatForm = document.getElementById('chat-form');
 const messageInput = document.getElementById('message-input');
 var converter = null;
@@ -12,7 +16,7 @@ window.addEventListener('load', () => {
 themeToggle.addEventListener('click', (event) => {
     event.preventDefault();
     const isDarkMode = document.documentElement.classList.toggle('dark-mode');
-    localStorage.setItem('theme', isDarkMode ? 'dark' : 'light');
+    localStorage.setItem('dark_mode', isDarkMode ? 'true' : 'false');
 });
 
 /**
@@ -22,22 +26,38 @@ themeToggle.addEventListener('click', (event) => {
  * @param {string} content - The text content of the message
  * @returns {HTMLElement} The newly created message element
  */
-function addMessage(role, type, content) {
+function addMessage(role, type, content, source='default') {
+    let m_list = messageList;
+    if (source !== 'default') {
+        const parts = source.split(':');
+        if (parts.length === 2) {
+            const index = parseInt(parts[0]);
+            list_name = parts[1];
+            if (index === 1) {
+                m_list = messageListAlt1;
+                messageListAlt1Label.innerText = list_name;
+            } else if (index === 2) {
+                m_list = messageListAlt2;
+                messageListAlt2Label.innerText = list_name;
+            }
+            
+        }
+    }
     // get the status message if it exists
-    const existingStatus = messageList.querySelector('.status-message');
+    const existingStatus = m_list.querySelector('.status-message');
     if (existingStatus) {
         existingStatus.remove();
     }
     const messageElement = document.createElement('div');
     messageElement.classList.add('message', `${role}-message`, `${type}-message`);
     messageElement.textContent = content; // FIX: Use textContent to preserve whitespace
-    messageList.appendChild(messageElement);
+    m_list.appendChild(messageElement);
 
     // re-add the status message if it existed
     if (existingStatus) {
-        messageList.appendChild(existingStatus);
+        m_list.appendChild(existingStatus);
     }
-    messageList.scrollTop = messageList.scrollHeight;
+    m_list.scrollTop = m_list.scrollHeight;
     return messageElement;
 }
 
@@ -81,6 +101,7 @@ window.addEventListener('load', async () => {
 });
 
 // --- Event 2: Handle Form Submission ---
+var llm_mode = 'default';
 chatForm.addEventListener('submit', async (event) => {
 
     event.preventDefault();
@@ -105,7 +126,7 @@ chatForm.addEventListener('submit', async (event) => {
         const response = await fetch('/api/chat', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ message: message, user_token: get_token() }),
+            body: JSON.stringify({ message: message, user_token: get_token(), mode: llm_mode })
         });
 
         if (!response.ok) throw new Error('Network response was not ok');
@@ -117,6 +138,7 @@ chatForm.addEventListener('submit', async (event) => {
         let currentType = null;
         let responseElement = null;
         let currentResponseRaw = null;
+        let currentSource = null;
 
         const statusMessage = addMessage('assistant', 'status', 'Thinking...');
 
@@ -197,7 +219,7 @@ chatForm.addEventListener('submit', async (event) => {
                 }
 
                 // (Your existing logic for appending the message)
-                if (currentType !== null && responseElement !== null && chunk.type === currentType) {
+                if (currentType !== null && responseElement !== null && chunk.type === currentType && chunk.source === currentSource) {
                     // append to existing message
                     const content = chunk.content;
                     currentResponseRaw += content;
@@ -216,8 +238,10 @@ chatForm.addEventListener('submit', async (event) => {
                     if (chunk.type === 'info' || chunk.type === 'error') {
                         role = 'info';
                     }
+                    const source = chunk.source ? chunk.source : 'default';
+                    currentSource = source;
                     console.log("Adding chunk:", chunk.content);
-                    responseElement = addMessage(role, chunk.type, chunk.content);
+                    responseElement = addMessage(role, chunk.type, chunk.content, source);
                     currentResponseRaw = chunk.content;
 
                     if (converter) {

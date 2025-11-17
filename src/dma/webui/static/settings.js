@@ -145,7 +145,7 @@ function toggle_hide_message_type(message_type, hide) {
     if (hide) {
         multiMessageList.classList.add(`hide-${message_type}`);
     } else {
-        messageList.classList.remove(`hide-${message_type}`);
+        multiMessageList.classList.remove(`hide-${message_type}`);
     }
 }
 
@@ -161,8 +161,10 @@ window.addEventListener('load', () => {
             const multiMessageList = document.getElementById('multi-message-list');
             if (enabled) {
                 multiMessageList.classList.add('multi-response-mode');
+                llm_mode = 'compare';
             } else {
                 multiMessageList.classList.remove('multi-response-mode');
+                llm_mode = 'default';
             }
         }
     );
@@ -170,10 +172,15 @@ window.addEventListener('load', () => {
     const darkModeToggle = add_settings_toggle(
         'dark_mode',
         'Enable Dark Mode',
-        document.body.classList.contains('dark-mode'),
+        true,
         'Toggle dark mode for the interface',
         (enabled, container) => {
-            const isDarkMode = document.documentElement.classList.toggle('dark-mode');
+            const isDarkMode = enabled;
+            if (isDarkMode) {
+                document.documentElement.classList.add('dark-mode');
+            } else {
+                document.documentElement.classList.remove('dark-mode');
+            }
             localStorage.setItem('theme', isDarkMode ? 'dark' : 'light');
             // also update the button state in case it is out of sync
             const container_button = container.querySelector('input[type="checkbox"]');

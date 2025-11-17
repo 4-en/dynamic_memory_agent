@@ -19,6 +19,7 @@ import json
 class ChatMessage(BaseModel):
     role: str # "USER" | "ASSISTANT"
     content: str
+    source: str = "default" # used to identify llm source. default or "#:name", with # being the index of the alternative llm
     
     def from_message(msg: Message) -> "ChatMessage":
         return ChatMessage(role=msg.role.value.lower(), content=msg.message_text or "")
@@ -27,6 +28,7 @@ class ChatMessage(BaseModel):
 class ChatRequest(BaseModel):
     message: str
     user_token: str | None = None
+    mode: str = "default" # default for single llm, compare for multiple llms
     
     def to_message(self) -> Message:
         return Message(role=Role.USER, content=self.message)
@@ -41,6 +43,7 @@ class StreamingResponseChunk(BaseModel):
     type: str # "query" | "retrieval" | "thought" | "response" | "error" | "status"
     content: str | None = None
     status: str | None = None
+    source: str = "default" # used to identify llm source. default or "#:name", with # being the index of the alternative llm
 
 class DMAWebUI:
     def __init__(self):
@@ -53,7 +56,7 @@ class DMAWebUI:
         print("Loading pipeline...")
         self.pipeline = Pipeline()
         print("Pipeline loaded.")
-        self._conversations = {}
+        self._user_data = {}
         self._generating_response = False
         
         app = FastAPI()
@@ -77,13 +80,15 @@ class DMAWebUI:
         self.app.post("/api/chat")(self.chat)
         self.app.get("/", response_class=FileResponse)(self.get_index)
         
-    def get_conversation(self, user_token: str) -> Conversation:
+    def get_conversation(self, user_token: str, key: str = "conversation") -> Conversation:
         """
         Get the conversation for a given user token.
         """
-        if user_token not in self._conversations:
-            self._conversations[user_token] = Conversation()
-        return self._conversations[user_token]
+        if user_token not in self._user_data:
+            self._user_data[user_token] = {}
+        if key not in self._user_data[user_token]:
+            self._user_data[user_token][key] = Conversation()
+        return self._user_data[user_token][key]
 
     async def get_history(self, request: HistoryRequest) -> list[ChatMessage]:
         """
@@ -98,8 +103,8 @@ class DMAWebUI:
         """
         Clears the chat history for the given user token.
         """
-        if request.user_token in self._conversations:
-            del self._conversations[request.user_token]
+        if request.user_token in self._user_data:
+            del self._user_data[request.user_token]
         return {"status": "success"}
 
             
@@ -185,6 +190,12 @@ class DMAWebUI:
                             for line in r_lines[1:]:
                                 s += "    " + line + "  \n"
                         yield StreamingResponseChunk(type="retrieval", content=s)
+                    case PipelineStatus.MEMORY_UPDATE:
+                        if update.message:
+                            yield StreamingResponseChunk(type="status", content=None, status=update.message)
+                    case PipelineStatus.SUMMARY_UPDATE:
+                        if update.message:
+                            yield StreamingResponseChunk(type="status", content=None, status=update.message)
                     case _:
                         # for other statuses, just send status if message is present
                         if update.message:
@@ -266,6 +277,21 @@ class DMAWebUI:
                 yield chunk
                 
             conversation.add_message(response)
+            
+            # if mode is compare, run alternative llms
+            if chat_request.mode == "compare":
+                # first alt is just the default llm
+                local_llm = self.pipeline.generator
+                alt_conversation_1 = self.get_conversation(chat_request.user_token, key="alt_conversation_1")
+                alt_conversation_1.add_message(chat_request.to_message())
+                alt_response_1 = await loop.run_in_executor(None, local_llm.generate, alt_conversation_1)
+                for chunk in self._handle_pipeline_response(alt_response_1):
+                    # set source to "1:#name"
+                    chunk.source = f"1:Local LLM"
+                    yield chunk
+                alt_conversation_1.add_message(alt_response_1)
+                
+                # TODO: add gemini or openai llm as second alternative
 
 
         except Exception as e:
@@ -297,7 +323,7 @@ class DMAWebUI:
                 #if (i + 1) * words_per_chunk < len(words):
                 #    # add trailing space if not last chunk
                 #    sub_content += " "
-                yield StreamingResponseChunk(type=chunk.type, content=sub_content)
+                yield StreamingResponseChunk(type=chunk.type, content=sub_content, status=chunk.status, source=chunk.source)
                 await asyncio.sleep(delay)
                 
     async def chunks_to_json_stream(self, chunk_generator: AsyncGenerator[StreamingResponseChunk, None]) -> AsyncGenerator[bytes, None]:
@@ -317,6 +343,8 @@ class DMAWebUI:
         # output ip and request message to console
         print(f"Received chat request: {request.message}")
         print(f"User token: {request.user_token}")
+        print(f"Mode: {request.mode}")
+        
         
         if not request.user_token or len(request.user_token.strip()) < 5:
             return "{\"type\": \"error\", \"content\": \"Error: Invalid user token.\"}"

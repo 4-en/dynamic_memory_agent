@@ -17,9 +17,9 @@
                 if (theme === 'dark') document.documentElement.classList.add('dark-mode');
                 else document.documentElement.classList.remove('dark-mode');
             };
-            const savedTheme = localStorage.getItem('theme');
+            const savedTheme = localStorage.getItem('dark_mode');
             const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-            if (savedTheme) applyTheme(savedTheme);
+            if (savedTheme) applyTheme(savedTheme === 'true' ? 'dark' : 'light');
             else if (prefersDark) applyTheme('dark');
         })();
     </script>
@@ -104,13 +104,14 @@
             <h3>Configuration</h3>
             <ul>
                 <li>Language Model: Qwen3-8B-Q4_K_M</li>
-                <li>Database: Neo4j Graph Database</li>
+                <li>Database: Neo4j 5 Graph Database</li>
                 <li>Current Memory Topic: Solar System</li>
             </ul>
             <h3>System</h3>
             <ul>
+                <li>OS: CachyOS (Linux 6.17.8-2-cachyos)</li>
                 <li>GPU: NVIDIA RTX 3090 (24GB)</li>
-                <li>CPU: Intel Core i7 13700K</li>
+                <li>CPU: Intel Core i7 12700K</li>
                 <li>RAM: 64GB DDR4</li>
             </ul>
         </form>
