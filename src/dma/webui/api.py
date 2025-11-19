@@ -12,7 +12,9 @@ from dma.core import Conversation, Message, Role, RetrievalStep, RetrievalQuery,
 import logging
 import json
 import google.genai as genai
-from dma.utils import get_env_variable
+from dma.utils import get_env_variable, get_data_dir
+import random
+import time
 
 
 
@@ -46,6 +48,20 @@ class StreamingResponseChunk(BaseModel):
     content: str | None = None
     status: str | None = None
     source: str = "default" # used to identify llm source. default or "#:name", with # being the index of the alternative llm
+    
+class BlindTestAnswer(BaseModel):
+    model_id: str
+    content: str
+    
+class BlindTestResponse(BaseModel):
+    answers: list[BlindTestAnswer]
+    
+class BlindTestRatingRequest(BaseModel):
+    user_token: str | None = None
+    best_model_id: str | None = None
+    
+class BlindTestRatingResponse(BaseModel):
+    content: str
 
 class DMAWebUI:
     def __init__(self):
@@ -89,6 +105,10 @@ class DMAWebUI:
         self.app.post("/api/clear_history")(self.clear_history)
         self.app.post("/api/chat")(self.chat)
         self.app.get("/", response_class=FileResponse)(self.get_index)
+        self.app.get("/index.html", response_class=FileResponse)(self.get_index)
+        self.app.get("/blind_test", response_class=FileResponse)(lambda: FileResponse(static_dir / "blind_test.html", media_type="text/html"))
+        self.app.post("/api/blind_test", response_model=BlindTestResponse)(self.blind_test)
+        self.app.post("/api/rate_blind_test", response_model=BlindTestRatingResponse)(self.rate_blind_test)
         
     def get_conversation(self, user_token: str, key: str = "conversation") -> Conversation:
         """
@@ -388,6 +408,99 @@ class DMAWebUI:
             # print("Sending chunk:", chunk.content)
             json_bytes = (json.dumps(chunk.model_dump(mode="json")) + "\n").encode("utf-8")
             yield json_bytes
+            
+    async def blind_test(self, request: ChatRequest) -> BlindTestResponse:
+        """
+        Receives a user message and returns a selection of responses from multiple LLMs without identifying them.
+        """
+        
+        blind_history = self.get_conversation(request.user_token, key="blind_test_conversation")
+        blind_history.add_message(request.to_message())
+        test_llms = {
+            "dynmem": lambda conv: self.pipeline.generate(conv),
+            "local": lambda conv: self.pipeline.generator.generate(conv)
+        }
+        answers = {}
+        for model_id, llm_func in test_llms.items():
+            answer = llm_func(blind_history.copy())
+            secret_id = str(random.randint(1000, 999999))
+            answers[secret_id] = {"model_id": model_id, "message": answer}
+            
+        client_answers = []
+        for secret_id, answer in answers.items():
+            client_answers.append(BlindTestAnswer(model_id=secret_id, content=answer["message"].message_text or ""))
+            
+        self._user_data[request.user_token]["blind_test_answers"] = answers
+            
+        # shuffle answers
+        random.shuffle(client_answers)
+        return BlindTestResponse(answers=client_answers)
+    
+    def _log_blind_test_rating(self, user_token: str, best_model_id: str):
+        """
+        Logs the blind test rating for analysis.
+        """
+        answers = self._user_data[user_token]["blind_test_answers"]
+        conversation = self.get_conversation(user_token, key="blind_test_conversation")
+        
+        best_model_name = answers[best_model_id].get("model_id", None)
+        
+        print("Logging blind test rating: User token:", user_token, "Best model ID:", best_model_id, "Best model name:", best_model_name)
+        
+        log_answers = []
+        for answer in answers.values():
+            log_answers.append({
+                "model_id": answer["model_id"],
+                "message": answer["message"].to_dict()
+            })
+        
+        entry = {
+            "user_token": user_token,
+            "preferred_model": best_model_name,
+            "conversation": [msg.to_dict() for msg in conversation.messages],
+            "answers": log_answers,
+            "timestamp": int(time.time())
+        }
+        
+        try:
+            data_dir = get_data_dir()
+            log_dir = data_dir / "blind_test_logs"
+            log_dir.mkdir(parents=True, exist_ok=True)
+            log_file = log_dir / "blind_test_ratings.jsonl"
+            with open(log_file, "a") as f:
+                f.write(json.dumps(entry) + "\n")
+        except Exception as e:
+            logging.error(f"Failed to log blind test rating: {str(e)}")
+    
+    async def rate_blind_test(self, request: BlindTestRatingRequest):
+        """
+        Receives the user's rating of the best blind test answer.
+        """
+        # check if there is an open blind test
+        if request.user_token not in self._user_data or "blind_test_answers" not in self._user_data[request.user_token]:
+            return BlindTestRatingResponse(content="Error: No blind test found for this user token.")
+        answers = self._user_data[request.user_token]["blind_test_answers"]
+        best_model_id = request.best_model_id
+        try:
+            self._log_blind_test_rating(request.user_token, best_model_id)
+        except Exception as e:
+            logging.error(f"Failed to log blind test rating: {str(e)}")
+        if request.best_model_id not in answers:
+            # treat as no selection, return dynmem as default
+            best_model_id = [k for k, v in answers.items() if v["model_id"] == "dynmem"][0]
+        else:
+            best_model_id = request.best_model_id
+            
+        # get the message content
+        best_message = answers[best_model_id]["message"].message_text or ""
+        
+        # delete the blind test data
+        del self._user_data[request.user_token]["blind_test_answers"]
+        
+        # add the message to the blind test conversation
+        blind_history = self.get_conversation(request.user_token, key="blind_test_conversation")
+        blind_history.add_message(answers[best_model_id]["message"])
+        return BlindTestRatingResponse(content=best_message)
 
     async def chat(self, request: ChatRequest):
         """

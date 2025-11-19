@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dynamic Memory Demo</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <link rel="stylesheet" href="/static/toggle.css">
+    <script defer src="https://cdn.jsdelivr.net/npm/mathjax@4/tex-mml-chtml.js"></script>
+</head>
+
+<body>
+    <script>
+        (function () {
+            const applyTheme = (theme) => {
+                if (theme === 'dark') document.documentElement.classList.add('dark-mode');
+                else document.documentElement.classList.remove('dark-mode');
+            };
+            const savedTheme = localStorage.getItem('dark_mode');
+            const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+            if (savedTheme) applyTheme(savedTheme === 'true' ? 'dark' : 'light');
+            else if (prefersDark) applyTheme('dark');
+        })();
+    </script>
+
+
+    <div class="header-bar">
+        <button id="theme-toggle" class="navbar-icon" title="Toggle dark/light mode">
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none"
+                stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+                class="icon icon-moon">
+                <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
+            </svg>
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none"
+                stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+                class="icon icon-sun">
+                <circle cx="12" cy="12" r="5"></circle>
+                <line x1="12" y1="1" x2="12" y2="3"></line>
+                <line x1="12" y1="21" x2="12" y2="23"></line>
+                <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+                <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+                <line x1="1" y1="12" x2="3" y2="12"></line>
+                <line x1="21" y1="12" x2="23" y2="12"></line>
+                <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+                <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+            </svg>
+        </button>
+    </div>
+
+    <div class="chat-container">
+
+        <div id="multi-message-list">
+            <div class="message-list-container">
+                <span id="model-label-1" class="model-label">DynMem</span>
+                <div id="message-list" class="message-list"></div></div>
+        </div>
+
+        <div class="answer-container hidden-answer">
+            <div class="prompt-skip-container">
+                <p class="answer-prompt">Select your preferred answer:</p>
+                <button id="skip-button" class="skip-button" onclick="send_blind_test_rating(null)">Skip</button>
+            </div>
+            <div id="answer-selections" class="answer-selections">
+                <!-- Answers and selection buttons will be added here dynamically -->
+            </div>
+        </div>
+
+        <form id="chat-form" class="chat-form">
+            <textarea id="message-input" placeholder="Type your message..." autocomplete="off" required></textarea>
+            <div class="input-container">
+                <button id="send-button" type="submit">Send</button>
+            </div>
+        </form>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/showdown@2.1.0/dist/showdown.min.js"></script>
+    <script src="/static/blind_test.js"></script>
+    <script>
+        // add initial info message
+        window.addEventListener('load', () => {
+            addMessage('info', 'response', 'Ask me about the Solar System and then select your preferred answer from different models.');
+        });
+
+        const messageInput_el = document.getElementById('message-input');
+        const sendButton_el = document.getElementById('send-button');
+
+        messageInput_el.addEventListener('keydown', function (event) {
+            // Check if the key pressed is 'Enter' and the 'Shift' key is NOT held down
+            if (event.key === 'Enter' && !event.shiftKey) {
+                // Prevent the default action (which is to insert a new line)
+                event.preventDefault();
+
+                // Programmatically click the send button to submit the form
+                sendButton_el.click();
+            }
+        });
+    </script>
+</body>
+
+</html>
