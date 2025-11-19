@@ -11,6 +11,8 @@ from dma.pipeline import Pipeline, PipelineUpdate, PipelineStatus
 from dma.core import Conversation, Message, Role, RetrievalStep, RetrievalQuery, Source, SourceType
 import logging
 import json
+import google.genai as genai
+from dma.utils import get_env_variable
 
 
 
@@ -58,6 +60,14 @@ class DMAWebUI:
         print("Pipeline loaded.")
         self._user_data = {}
         self._generating_response = False
+        
+        # setup gemini if key is set
+        GEMINI_API_KEY_NAME = "GENAI_API_KEY"
+        gemini_api_key = get_env_variable(GEMINI_API_KEY_NAME)
+        self._gemini = None
+        if gemini_api_key:
+            print("Setting up Google Gemini API...")
+            self._gemini = genai.Client(api_key=gemini_api_key)
         
         app = FastAPI()
         self.app = app
@@ -280,6 +290,7 @@ class DMAWebUI:
             
             # if mode is compare, run alternative llms
             if chat_request.mode == "compare":
+                gemini_response_task = self._generate_gemini_response(chat_request)
                 # first alt is just the default llm
                 local_llm = self.pipeline.generator
                 alt_conversation_1 = self.get_conversation(chat_request.user_token, key="alt_conversation_1")
@@ -291,7 +302,11 @@ class DMAWebUI:
                     yield chunk
                 alt_conversation_1.add_message(alt_response_1)
                 
-                # TODO: add gemini or openai llm as second alternative
+                gemini_message = await gemini_response_task
+                for chunk in self._handle_pipeline_response(gemini_message):
+                    # set source to "2:Gemini"
+                    chunk.source = f"2:Gemini-2.5-flash"
+                    yield chunk
 
 
         except Exception as e:
@@ -302,6 +317,45 @@ class DMAWebUI:
 
         finally:
             self._generating_response = False
+            
+    async def _generate_gemini_response(self, chat_request: ChatRequest) -> Message:
+        """
+        Generate a response using Google Gemini LLM.
+        """
+        if self._gemini is None:
+            logging.error("Gemini client not configured.")
+            return Message(role=Role.ASSISTANT, content="Error: Gemini LLM not configured.")
+        
+        conversation = self.get_conversation(chat_request.user_token, key="gemini_conversation")
+        prompt = chat_request.to_message()
+        conversation.add_message(prompt)
+        
+        gemini_messages = []
+        for msg in conversation.messages:
+            role = "user" if msg.role == Role.USER else "model"
+            gemini_messages.append({
+                "role": role,
+                "parts": [
+                    {
+                        "text": msg.message_text or ""
+                    }
+                ]
+            }
+            )
+        def generate_response():
+            response = self._gemini.models.generate_content(
+                model="gemini-2.5-flash",
+                contents=gemini_messages,
+            )
+            return response
+        
+        loop = asyncio.get_event_loop()
+        response = await loop.run_in_executor(None, generate_response)
+        
+        response_message = Message(role=Role.ASSISTANT, content=response.text)
+        conversation.add_message(response_message)
+        return response_message
+        
             
 
     async def yield_word_by_word_wrapper(self, inner_generator, time_per_chunk=2.0, messages_per_second=6.0)->AsyncGenerator[StreamingResponseChunk, None]:
