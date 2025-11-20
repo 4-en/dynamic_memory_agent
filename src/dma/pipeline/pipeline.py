@@ -422,7 +422,6 @@ class Pipeline:
         
         # add sources and entities to response if available
         if retrieval and len(retrieval.steps) > 0:
-            last_step = retrieval.steps[-1]
             source_memories = []
             for step in retrieval.steps:
                 if step.is_pre_query:
@@ -524,7 +523,7 @@ class Pipeline:
             return
             
         # TODO: add retriever and retrieval loop
-        while not retrieval.done:
+        while not retrieval.done and retrieval.current_iteration < retrieval.max_iterations:
             logging.debug(f"Retrieval iteration {retrieval.current_iteration+1}/{retrieval.max_iterations}")
             
             self._update_progress(
@@ -589,6 +588,8 @@ class Pipeline:
                     summary = evaluation.summary
                     if summary and summary.strip() != "":
                         last_step.summary = summary
+                    else:
+                        print("No summary generated for retrieval step. Weird.")
                         
                     # filter results based on evaluation
                     relevant_memories = evaluation.get_relevant_memories()
@@ -606,6 +607,9 @@ class Pipeline:
                         last_step,
                         evaluation
                     )
+                    
+                    if evaluation.fully_answered:
+                        retrieval.mark_satisfactory()
                     
                     # update progress with feedback data
                     self._update_progress(

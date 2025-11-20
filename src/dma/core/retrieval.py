@@ -360,6 +360,7 @@ class Retrieval:
                 "As a large language model, I can't be sure that I have access to all and especially the latest information, "
                 "so if I don't have relevant information in my memory, I must refuse to answer."
             )
+            # this is overly insistent on making sure we don't answer, but otherwise the model might try to answer anyway
             self._last_summary_count = total_memories
             return self.final_summary
         
@@ -371,6 +372,9 @@ class Retrieval:
         self.final_summary = "Okay, this is what I know:\n"
         memory_summary = ""
         for step in self.steps:
+            if step.is_pre_query and len(self.steps) > 1:
+                # skip pre-query step summaries if there is a main step
+                continue
             if step.summary:
                 memory_summary += f"{step.summary}\n"
             else:

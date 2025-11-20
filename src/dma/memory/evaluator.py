@@ -125,7 +125,7 @@ class Evaluation:
     missing_keywords: list[str] = field(default_factory=list)
     fully_answered: bool = False
     
-    def get_relevant_memories(self, threshold: MemoryRelevance=MemoryRelevance.RELEVANT) -> list[Memory]:
+    def get_relevant_memories(self, threshold: MemoryRelevance=MemoryRelevance.SUPPORTING) -> list[Memory]:
         """
         Get memories with relevance scores above the given threshold.
         

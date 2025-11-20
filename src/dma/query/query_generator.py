@@ -304,7 +304,7 @@ class QueryGenerator:
         return None
         
     
-    def _add_retrieval_step_to_prompt(self, step, messages):
+    def _add_retrieval_step_to_prompt(self, step:RetrievalStep, messages):
         """
         Add a retrieved information to the prompt messages.
         
@@ -327,16 +327,20 @@ class QueryGenerator:
         #     message_content.append(f"<think>{step.reasoning}</think>")
 
         message_content.append("Retrieved Context from previous queries:")
-        for memory_result in step.results:
-            memory = memory_result.memory
-            memory_content = memory.memory
-            if not memory_content:
-                continue
-            memory_source = memory.source or "unknown"
-            part = memory_content
-            if memory_source:
-                part += f" (source: {memory_source})"
-            message_content.append(f"- {part}")
+        
+        if step.summary:
+            message_content.append(step.summary)
+        else:
+            for memory_result in step.results:
+                memory = memory_result.memory
+                memory_content = memory.memory
+                if not memory_content:
+                    continue
+                memory_source = memory.source or "unknown"
+                part = memory_content
+                if memory_source:
+                    part += f" (source: {memory_source})"
+                message_content.append(f"- {part}")
 
         messages.append(Message(
             role=Role.USER,
