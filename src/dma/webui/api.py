@@ -12,7 +12,7 @@ from dma.core import Conversation, Message, Role, RetrievalStep, RetrievalQuery,
 import logging
 import json
 import google.genai as genai
-from dma.utils import get_env_variable, get_data_dir
+from dma.utils import get_env_variable, get_data_dir, embed_text
 import random
 import time
 
@@ -310,7 +310,6 @@ class DMAWebUI:
             
             # if mode is compare, run alternative llms
             if chat_request.mode == "compare":
-                gemini_response_task = self._generate_gemini_response(chat_request)
                 # first alt is just the default llm
                 local_llm = self.pipeline.generator
                 alt_conversation_1 = self.get_conversation(chat_request.user_token, key="alt_conversation_1")
@@ -322,11 +321,16 @@ class DMAWebUI:
                     yield chunk
                 alt_conversation_1.add_message(alt_response_1)
                 
-                gemini_message = await gemini_response_task
-                for chunk in self._handle_pipeline_response(gemini_message):
-                    # set source to "2:Gemini"
-                    chunk.source = f"2:Gemini-2.5-flash"
+                # second alt is basic RAG
+                alt_conversation_2 = self.get_conversation(chat_request.user_token, key="alt_conversation_2")
+                alt_conversation_2.add_message(chat_request.to_message())
+                alt_response_2 = await self._generate_basic_rag_response(alt_conversation_2)
+                for chunk in self._handle_pipeline_response(alt_response_2):
+                    # set source to "2:Basic RAG"
+                    chunk.source = f"2:Basic RAG"
                     yield chunk
+                alt_conversation_2.add_message(alt_response_2)
+                
 
 
         except Exception as e:
@@ -338,6 +342,41 @@ class DMAWebUI:
         finally:
             self._generating_response = False
             
+    async def _generate_basic_rag_response(self, conversation: Conversation) -> Message:
+        """
+        Generate a basic RAG response without using the full pipeline.
+        """
+        conversation = conversation.copy()
+        
+        instruction = Message(
+            role=Role.SYSTEM,
+            content="You are a helpful AI assistant. Reply to the user and use the expert's information when available, without mentioning the expert."
+        )
+        conversation.messages.insert(0, instruction)
+        
+        loop = asyncio.get_event_loop()
+        
+        prompt = conversation.messages[-1]
+        embedding = embed_text(prompt.message_text or "").tolist()
+        
+        # retrieve memories
+        db = self.pipeline.retriever.graph_memory
+        results = await loop.run_in_executor(None, db.query_memories_by_vector, embedding, 10)
+        
+        if len(results) > 0:
+            retrieval_text = "<EXPERT>\nHere is some information from an expert that may help you:\n\n"
+            for res in results:
+                retrieval_text += f"- {res.memory.memory}\n"
+            retrieval_message = Message(
+                role=Role.USER,
+                content=retrieval_text
+            )
+            conversation.messages.append(retrieval_message)
+            
+        response = await asyncio.get_event_loop().run_in_executor(None, self.pipeline.generator.generate, conversation)
+        return response
+        
+        
     async def _generate_gemini_response(self, chat_request: ChatRequest) -> Message:
         """
         Generate a response using Google Gemini LLM.
@@ -415,14 +454,27 @@ class DMAWebUI:
         """
         
         blind_history = self.get_conversation(request.user_token, key="blind_test_conversation")
+        blind_history = blind_history.copy()
         blind_history.add_message(request.to_message())
+        
+        async def _generate_dynmem_response(conv: Conversation) -> Message:
+            loop = asyncio.get_event_loop()
+            response = await loop.run_in_executor(None, self.pipeline.generate, conv)
+            return response
+        
+        async def _generate_local_response(conv: Conversation) -> Message:
+            loop = asyncio.get_event_loop()
+            response = await loop.run_in_executor(None, self.pipeline.generator.generate, conv)
+            return response
+        
         test_llms = {
-            "dynmem": lambda conv: self.pipeline.generate(conv),
-            "local": lambda conv: self.pipeline.generator.generate(conv)
+            "dynmem": _generate_dynmem_response,
+            "local": _generate_local_response,
+            "basic_rag": self._generate_basic_rag_response
         }
         answers = {}
         for model_id, llm_func in test_llms.items():
-            answer = llm_func(blind_history.copy())
+            answer = await llm_func(blind_history.copy())
             secret_id = str(random.randint(1000, 999999))
             answers[secret_id] = {"model_id": model_id, "message": answer}
             
@@ -451,13 +503,23 @@ class DMAWebUI:
         for answer in answers.values():
             log_answers.append({
                 "model_id": answer["model_id"],
-                "message": answer["message"].to_dict()
+                "message": {
+                    "role": answer["message"].role.value,
+                    "parts": [part.to_dict() for part in answer["message"].parts],
+                    "entities": answer["message"].entities,
+                    "source_memories": [sm.to_dict() for sm in answer["message"].source_memories]
+                }
             })
         
         entry = {
             "user_token": user_token,
             "preferred_model": best_model_name,
-            "conversation": [msg.to_dict() for msg in conversation.messages],
+            "conversation": [{
+                "role": msg.role.value,
+                "parts": [part.to_dict() for part in msg.parts],
+                "entities": msg.entities,
+                "source_memories": [sm.to_dict() for sm in msg.source_memories]
+            } for msg in conversation.messages],
             "answers": log_answers,
             "timestamp": int(time.time())
         }

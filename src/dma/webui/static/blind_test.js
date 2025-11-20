@@ -76,15 +76,20 @@ function add_answer_to_selections(model_id, message_content) {
     // creates a new element in the answer selections area containing the message content and event listener for selection
 
     const messageElement = document.createElement('div');
-    messageElement.classList.add('message', 'assistant-message', 'response-message', 'select-answer-message');
+    messageElement.classList.add('select-answer-message');
     messageElement.innerHTML = converter.makeHtml(message_content);
     MathJax.typesetPromise([messageElement]).catch((err) => console.log('MathJax typeset failed: ' + err.message));
 
-    messageElement.addEventListener('click', () => {
+
+    // wrap in outer div
+    const outerDiv = document.createElement('div');
+    outerDiv.appendChild(messageElement);
+
+    outerDiv.addEventListener('click', () => {
         send_blind_test_rating(model_id);
     });
 
-    answerSelections.appendChild(messageElement);
+    answerSelections.appendChild(outerDiv);
 }
 
 chatForm.addEventListener('submit', async (event) => {
