@@ -15,6 +15,7 @@ class MemoryRelevance(Enum):
     UNKNOWN = "unknown"
     NONSENSE = "nonsense"
     IRRELEVANT = "irrelevant"
+    SUPPORTING = "supporting"
     RELEVANT = "relevant"
     PERFECT = "perfect"
     
@@ -71,7 +72,7 @@ Reasoning and summary about what kind of information we need and then the releva
             "memory_id_int": <int>, # ID of the memory being evaluated from the list of provided memories
             "short_feedback_str": "<string>", # brief explanation of the relevance score
             "memory_keywords_list": ["<string>", ...], # list of keywords/entities that are relevant to both the memory and the query. Can include new ones not in the original memory metadata.
-            "relevance_str": <string: "NONSENSE" | "IRRELEVANT" | "RELEVANT" | "PERFECT"> # relevance rating of the memory to the query. NONSENSE for information that doesn't make sense, IRRELEVANT for information that is unrelated, RELEVANT for information that is somewhat related and useful, PERFECT for information that directly answers the query
+            "relevance_str": <string: "NONSENSE" | "IRRELEVANT" | "SUPPORTING" | "RELEVANT" | "PERFECT"> # relevance rating of the memory to the query. NONSENSE for information that doesn't make sense, IRRELEVANT for information that is unrelated, SUPPORTING for information that is not the direct answer, but helps explaining it or gives context, RELEVANT for information that is somewhat related and useful, PERFECT for information that directly answers the query
         },
         ...
     ],
@@ -139,7 +140,7 @@ class Evaluation:
             List of relevant memories.
         """
         # since we cannot be sure with UNKNOWN, give it priority when its a memory property, and act as lowest when its a threshold
-        ordered_relevance = [MemoryRelevance.NONSENSE, MemoryRelevance.IRRELEVANT, MemoryRelevance.RELEVANT, MemoryRelevance.PERFECT, MemoryRelevance.UNKNOWN]
+        ordered_relevance = [MemoryRelevance.NONSENSE, MemoryRelevance.IRRELEVANT, MemoryRelevance.SUPPORTING, MemoryRelevance.RELEVANT, MemoryRelevance.PERFECT, MemoryRelevance.UNKNOWN]
         threshold_index = ordered_relevance.index(threshold) if threshold != MemoryRelevance.UNKNOWN else 0
         relevant_memories = [mem for mem, rating in zip(self.memories, self.ratings) if ordered_relevance.index(rating) >= threshold_index]
         return relevant_memories
@@ -237,18 +238,22 @@ class MemoryEvaluator:
                 continue  # skip invalid memory IDs
             relevance = e.relevance_str.lower()
             mem_relevance = None
+            
             match relevance:
                 case "nonsense":
                     mem_relevance = MemoryRelevance.NONSENSE
                 case "irrelevant":
                     mem_relevance = MemoryRelevance.IRRELEVANT
+                case "supporting":
+                    mem_relevance = MemoryRelevance.SUPPORTING
                 case "relevant":
                     mem_relevance = MemoryRelevance.RELEVANT
                 case "perfect":
                     mem_relevance = MemoryRelevance.PERFECT
-            if mem_relevance == None:
-                logging.warning(f"Unknown relevance '{e.relevance_str}' for memory ID {mem_id+1}; setting to UNKNOWN.")
-                mem_relevance = MemoryRelevance.UNKNOWN
+                case _:
+                    logging.warning(f"Unknown relevance '{e.relevance_str}' for memory ID {mem_id+1}; setting to UNKNOWN.")
+                    mem_relevance = MemoryRelevance.UNKNOWN
+            
             memory_list.append(memories[mem_id])
             scores.append(mem_relevance)
             keywords_list.append([NER.normalize_entity(kw) for kw in e.memory_keywords_list])

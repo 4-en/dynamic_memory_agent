@@ -1,7 +1,7 @@
 from dma.core.conversation import Conversation
 from dma.core.message import Message, Role
 from dma.core.memory import Memory, FeedbackType
-from dma.core.retrieval import RetrievalStep, RetrievalQuery, Retrieval, MemoryResult
+from dma.core.retrieval import RetrievalStep, RetrievalQuery, Retrieval, MemoryResult, EmbeddingQuery
 from dma.config import DmaConfig, get_config
 
 from dma.query import QueryGenerator
@@ -335,6 +335,7 @@ class Pipeline:
                 logging.debug(f"Found entities in prompt: {entities}")
                 prompt.entities = entities
                 pre_query = RetrievalQuery.from_entities(entities, weight=1.0)
+                pre_query.embedding_query = EmbeddingQuery.from_text(prompt.message_text)
                 pre_step = RetrievalStep(queries=[pre_query], is_pre_query=True)
                 retrieval.add_step(pre_step)
                 self._update_progress(
@@ -355,7 +356,7 @@ class Pipeline:
                     retrieval_step=pre_step
                 )
 
-                results = self.retriever.retrieve(conversation,pre_step, top_k=self.config.retrieval_num_results)
+                results = self.retriever.retrieve(conversation, pre_step, top_k=5) # small number of results for pre-retrieval
                 pre_step.results.extend(results)
                 
                 current_step += 1

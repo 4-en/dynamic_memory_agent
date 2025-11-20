@@ -6,6 +6,7 @@ from dma.utils import cosine_similarity
 from .graph import Neo4jMemory, GraphMemory, GraphResult
 from .evaluator import Evaluation, MemoryRelevance
 import math
+import logging
 
 from dma.config.dma_config import get_config
 
@@ -69,7 +70,7 @@ class Retriever:
         """
         return self.graph_memory.add_memory_series(memories)
     
-    def retrieve(self, conversation: Conversation, query: RetrievalStep, previous_retrievals: Retrieval=None, top_k: int = 5) -> list[MemoryResult]:
+    def retrieve(self, conversation: Conversation, query: RetrievalStep, previous_retrievals: Retrieval=None, top_k: int = 10) -> list[MemoryResult]:
         """Retrieve relevant memories based on the provided query.
         
         Parameters
@@ -109,48 +110,170 @@ class Retriever:
         sorted_entities = sorted(entities.items(), key=lambda item: item[1], reverse=True)[:TOP_K_ENTITIES]
         sorted_entities = [entity for entity, _ in sorted_entities]
         
-        TOP_K_QUERY_RESULTS = 10
+        TOP_K_QUERY_RESULTS = max(20, top_k*2)  # ensure we get enough results to rank from
         embedding_results = [self.graph_memory.query_memories_by_vector(embedding, top_k=TOP_K_QUERY_RESULTS) for embedding in embeddings]
         entity_results = self.graph_memory.query_memories_by_entities(sorted_entities, limit=TOP_K_QUERY_RESULTS)
+        
+        # MIN_ENTITY_SCORE = max(1.0, len(entities) / 4.0)
+        MIN_SIMILARITY = 0.5
+        
         all_memory_results = {}
         for entity_list in entity_results.values():
             for graph_result in entity_list:
                 all_memory_results[graph_result.memory.id] = graph_result.memory
         for embed_list in embedding_results:
             for graph_result in embed_list:
+                if graph_result.score < MIN_SIMILARITY:
+                    continue
                 all_memory_results[graph_result.memory.id] = graph_result.memory
 
         # to list
         all_memory_results = list(all_memory_results.values())
         
+        print(f"Initial n results before filtering: {len(all_memory_results)}")
+        
         # filter out blacklisted memories
         all_memory_results = [mem for mem in all_memory_results if not mem.id in blacklisted_memory_ids]
+        
+        print(f"n results after blacklisting: {len(all_memory_results)}")
             
                 
         # 3. rerank results based on entity scales and other factors
         # make sure to prioritize embedding results if present
         ranked_results = self._rank_memories(all_memory_results, entities, embeddings)
         
-        if False:
-            # TODO: under some conditions, we may want to expand the query and re-query
-            # e.g., if we have few results, or if the results are low quality
-            
-            # 4. expand query based on results and re-query if needed
-            # possibilities: 
-            # - get related entities from graph (calculated using co-mentions)
-            # - get related memories (using graph links)
-            # rerank based on:
-            # - original_memory_score * distance_scale
-            # - original_entity_score * entity_similarity_scale
-            # - time decay if applicable
-            pass
+        print(f"Retriever: Ranked {len(ranked_results)} memories.")
         
-        if top_k is not None and len(ranked_results) > top_k:
-            ranked_results = ranked_results[:top_k]
-            
-        return ranked_results
+        # use 60:40 split between direct results and context expanded results
+        if top_k == None:
+            top_k = len(ranked_results) / 0.6  # ensure we get all direct results if no top_k specified
+        n_direct = int(top_k * 0.6)
+        n_expanded = top_k - n_direct
+        
+        direct_results = ranked_results[:n_direct]
+        
 
         
+        # 4. expand query based on results and re-query if needed
+        # possibilities: 
+        # - get related entities from graph (calculated using co-mentions)
+        # - get related memories (using graph links)
+        # rerank based on:
+        # - original_memory_score * distance_scale
+        # - original_entity_score * entity_similarity_scale
+        # - time decay if applicable
+        
+        blacklisted_memory_ids = blacklisted_memory_ids.union([res.memory.id for res in direct_results])
+        
+        # convert to list, since deep_relationship_traversal expects list
+        blacklisted_memory_ids = list(blacklisted_memory_ids)
+        
+        # get context expanded results for top 3 direct results
+        TOP_DIRECT_FOR_EXPANSION = 3
+        all_expensions = []
+        for direct_result in direct_results[:TOP_DIRECT_FOR_EXPANSION]:
+            expansions = self.graph_memory.deep_relationship_traversal(
+                direct_result.memory.id, 
+                max_depth=4, 
+                stop_k=n_expanded,
+                blacklist_ids=blacklisted_memory_ids
+                )
+            all_expensions.append(expansions)
+            
+        # combine all iterations by summing up scores and then applying dropoff
+        unique_expanded_memories = {}
+        for expansions in all_expensions:
+            for graph_result in expansions:
+                if not graph_result.memory.id in unique_expanded_memories:
+                    unique_expanded_memories[graph_result.memory.id] = graph_result
+                else:
+                    unique_expanded_memories[graph_result.memory.id].score += graph_result.score
+                    
+        expanded_memories = list(unique_expanded_memories.values())
+        apply_time_dropoff, apply_access_dropoff = Retriever._get_dropoff_functions(
+            [res.memory for res in expanded_memories]
+        )
+        for res in expanded_memories:
+            res.score = apply_time_dropoff(res.score, res.memory)
+            res.score = apply_access_dropoff(res.score, res.memory)
+            res.is_context_expansion = True
+            
+        # sort by score
+        expanded_memories.sort(key=lambda x: x.score, reverse=True)
+        expanded_results = expanded_memories[:n_expanded]
+
+            
+        final_results = direct_results + expanded_results
+        
+        print(f"Retriever: Retrieved {len(final_results)} memories ({len(direct_results)} direct, {len(expanded_results)} expanded).")
+        
+        return final_results
+        
+
+        
+    @staticmethod
+    def _get_dropoff_functions(memories: list[Memory], MAX_TIME_DROPOFF=0.5, MAX_ACCESS_DROPOFF=0.5)->tuple[callable, callable]:
+        """
+        Get dropoff functions for time and access feedback.
+        
+        Parameters
+        ----------
+        memories : list[Memory]
+            The list of memories to analyze.
+        MAX_TIME_DROPOFF : float
+            The maximum dropoff factor for time-based decay.
+        MAX_ACCESS_DROPOFF : float
+            The maximum dropoff factor for access-based decay.
+            
+        Returns
+        -------
+        tuple[callable, callable]
+            A tuple containing the time dropoff function and access dropoff function.\n
+            apply_time_dropoff(score: float, memory: Memory) -> float\n
+            apply_access_dropoff(score: float, memory: Memory) -> float"""
+        
+        oldest_memory_time = 4102488000
+        newest_memory_time = 0
+        most_positive_accesses = 0
+        most_negative_accesses = 0
+        most_total_accesses = 0
+        
+        for memory in memories:
+            if memory.last_access is not None:
+                if memory.last_access < oldest_memory_time:
+                    oldest_memory_time = memory.last_access
+                if memory.last_access > newest_memory_time:
+                    newest_memory_time = memory.last_access
+            if memory.total_access_count > most_total_accesses:
+                most_total_accesses = memory.total_access_count
+            if memory.positive_access_count > most_positive_accesses:
+                most_positive_accesses = memory.positive_access_count
+            if memory.negative_access_count > most_negative_accesses:
+                most_negative_accesses = memory.negative_access_count
+        
+        # priotize more recent memories, drop off older ones
+        def apply_time_dropoff(score: float, memory: Memory) -> float:
+            memory_time = memory.last_access if memory.last_access is not None else oldest_memory_time
+            if newest_memory_time <= oldest_memory_time:
+                return score
+            time_ratio = (memory_time - oldest_memory_time) / (newest_memory_time - oldest_memory_time)
+            time_scale = MAX_TIME_DROPOFF + (1 - MAX_TIME_DROPOFF) * time_ratio
+            return score * time_scale
+        
+        # priotize memories with more positive feedback, drop off those with more negative feedback
+        # also, even if ration is 100% positive, we still want to prioritize ones with more total accesses
+        # maybe do this 70:30 between positive ratio and total accesses
+        def apply_access_dropoff(score: float, memory: Memory) -> float:
+            if most_total_accesses == 0:
+                return score
+            pos_ratio = 0.0
+            if memory.positive_access_count + memory.negative_access_count > 0:
+                pos_ratio = memory.positive_access_count / (memory.positive_access_count + memory.negative_access_count)
+            access_ratio = memory.total_access_count / most_total_accesses
+            access_scale = MAX_ACCESS_DROPOFF + (1 - MAX_ACCESS_DROPOFF) * (0.7 * pos_ratio + 0.3 * access_ratio)
+            return score * access_scale
+        
+        return apply_time_dropoff, apply_access_dropoff
         
 
     
@@ -165,14 +288,18 @@ class Retriever:
         memory_pool = memories.copy()
         similarity_cache = {}
         EMBEDDING_MULTIPLIER = 2.0 + len(entities) / 2.0  # weight embeddings more if there are few entity matches
-        EMBEDDING_MIN_SIMILARITY = 0.6
-        FALLOFF_RATE = 0.5
-        calc_falloff = lambda n: FALLOFF_RATE ** n - 1
+        # multiplier doesn't matter that much, since we apply falloff anyway
+        EMBEDDING_MIN_SIMILARITY = 0.75
+        FALLOFF_RATE = 0.8
+        calc_falloff = lambda n: FALLOFF_RATE ** n  # exponential falloff based on n uses
         entity_counts = {entity: 0 for entity in entities} # n of times entity has been used in ranked memories
         embedding_sum = [0 for _ in embeddings] # sum of similarities in ranked memories
+        
+        apply_time_dropoff, apply_access_dropoff = Retriever._get_dropoff_functions(memories)
+        
         while len(memory_pool) > 0:
             best_memory = None
-            best_score = -1
+            best_score = 0.0
             for memory in memory_pool:
                 score = 0.0
                 # embedding similarity
@@ -182,7 +309,7 @@ class Retriever:
                         if key in similarity_cache:
                             similarity = similarity_cache[key]
                         else:
-                            similarity = cosine_similarity(memory.embedding, query_embedding)
+                            similarity = (cosine_similarity(memory.embedding, query_embedding) + 1) / 2  # normalize to 0-1 
                             similarity_cache[key] = similarity
                         if similarity >= EMBEDDING_MIN_SIMILARITY:
                             # apply falloff based on how many times we've used this embedding
@@ -196,11 +323,19 @@ class Retriever:
                         # apply falloff based on how many times we've used this entity
                         falloff = calc_falloff(entity_counts[entity])
                         score += entities[entity] * falloff
+                        
+                # time decay
+                if memory.last_access is not None:
+                    score = apply_time_dropoff(score, memory)
+                    
+                # access feedback decay
+                score = apply_access_dropoff(score, memory)
                 
                 if score > best_score:
                     best_score = score
                     best_memory = memory
             if best_memory is None:
+                logging.error("No best memory found during ranking, this should not happen.")
                 break
             ranked_memories.append(MemoryResult(memory=best_memory, score=best_score))
             memory_pool.remove(best_memory)
@@ -290,14 +425,21 @@ class Retriever:
         feedbacks = []
         for memory, relevance, entities in zip(evaluation.memories, evaluation.ratings, evaluation.memory_keywords):
             # collect union of query entities and memory entities, then add any keywords from evaluation
-            related_entities = set(memory.entities.keys()).union(query_entities)
-            for kw in entities:
-                related_entities.add(kw)
+            related_entities = set(memory.entities.keys())
+            
+            if relevance in [MemoryRelevance.PERFECT, MemoryRelevance.RELEVANT, MemoryRelevance.SUPPORTING]:
+                # only add these if memory was relevant, since we don't want to negatively reinforce actual relevant entities
+                related_entities = related_entities.union(entities)
+                    
+            if relevance in [MemoryRelevance.PERFECT, MemoryRelevance.RELEVANT, MemoryRelevance.IRRELEVANT, MemoryRelevance.NONSENSE]:
+                # only add these if memory was evaluated as relevant or irrelevant
+                # if it was supporting, it might not be directly related to the query
+                related_entities = related_entities.union(query_entities)
                 
             feedback = FeedbackType.NEUTRAL
             # map relevance to feedback type
             match relevance:
-                case MemoryRelevance.PERFECT | MemoryRelevance.RELEVANT:
+                case MemoryRelevance.PERFECT | MemoryRelevance.RELEVANT | MemoryRelevance.SUPPORTING:
                     feedback = FeedbackType.POSITIVE
                 case MemoryRelevance.IRRELEVANT | MemoryRelevance.NONSENSE:
                     feedback = FeedbackType.NEGATIVE
@@ -315,60 +457,3 @@ class Retriever:
             
         res = self.graph_memory.update_memory_weights(feedbacks)
         return res
-
-    
-    def give_memory_feedback(self, memory_ids: list[str], feedback: FeedbackType, entities: list[str]=[])-> bool:
-        """Provide feedback on specific memories.
-        Positive feedback can be used to reinforce the relevance of certain memories,
-        and links them together, while negative feedback can be used to de-prioritize certain memories.
-        
-        Parameters
-        ----------
-        memory_ids : list[str]
-            The list of memory IDs to provide feedback on.
-        feedback : FeedbackType
-            The type of feedback to provide.
-        entities : list[str]
-            Optional list of entities related to the feedback.
-            This can be used to specifically adjust weights for certain entities.
-        
-        Returns
-        -------
-        bool
-            True if the feedback was processed successfully, False otherwise.
-        """
-        # TODO: implement feedback mechanism
-        # this should involve matching the memories and their entities that were important,
-        # and then adjusting their weights in the graph database accordingly.
-        # if positive feedback, increase weights of memories and the query related entities
-        # if negative feedback, decrease weights of memories and the query related entities
-        # this also updates last accessed time of the memories, which can help with recency-based retrieval
-        
-        # TODO: consider how to scale weights
-        # probably should have diminishing returns for multiple feedbacks on same memory/entity
-        # something like 0 to 10 scale, with 1 as the base weight
-        # for example, positive feedback diff could be 1.4^(-current_weight+1)
-        # and negative feedback diff could be -(1.15^(current_weight)-0.9)
-        # this would ensure that higher weights are harder to increase further,
-        # and lower weights are harder to decrease further.
-        # we could also add an adjustable scaling factor to control the impact of feedback
-        # we should also consider pruning weights that go below a certain threshold (ie. 0)
-        
-        # possible problem:
-        # when our query is something like "What's the distance between Earth and Mars?"
-        # and we get a memory about "The distance between Earth and Venus is..."
-        # we could accidentally decrease the weight of Earth, since the memory is not relevant
-        # to the query, even though Earth is an important entity for the Memory.
-        # On the other hand, maybe this would still work, since further queries that mention Earth
-        # might not retrieve the same irrelevant memory, while ones that mention both earth and venus
-        # would still retrieve it.
-        # The relationship we are really after would be the connection between Earth and Venus, so maybe
-        # we could think of a system where we adjust weights between entity-memory relationships,
-        # rather than just entity or memory weights alone.
-        # This could be more complex to implement though.
-        # The general idea is: A query with "Earth" and "Venus" retrieves a memory containing both. Then,
-        # if the memory is relevant, we increase the weight of the connection between Earth and Venus
-        # for that memory. If not relevant, we decrease it.
-        # I'm not sure if that would we that effective though...
-        # maybe the initial system would balance things out enough anyway.
-        return False  # not implemented yet

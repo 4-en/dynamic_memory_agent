@@ -6,3 +6,4 @@ from dataclasses import dataclass
 class GraphResult:
     memory: Memory
     score: float
+    is_context_expansion: bool = False

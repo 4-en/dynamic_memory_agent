@@ -1042,7 +1042,10 @@ class Neo4jMemory(GraphMemory):
         CALL apoc.path.expandConfig(start, {
             maxLevel: $maxDepth,
             bfs: true,                  // Use Breadth-First Search
-            uniqueness: 'NODE_GLOBAL'   // Visit each node only once
+            uniqueness: 'NODE_GLOBAL',   // Visit each node only once
+            labelFilter: '>Memory', // only end on Memory nodes
+            relationshipFilter: 'RELATED_TO|MENTIONED_WITH|AUTHORED_BY|SOURCED_FROM|NEXT_IN_SERIES', // specify relationships to traverse
+            limit: $maxResults * 3        // fetch more to account for filtering later
             // use blacklistNodes to stop traversal at blacklisted nodes
         }) YIELD path
 
@@ -1053,7 +1056,7 @@ class Neo4jMemory(GraphMemory):
         // AND apply the blacklist
         WHERE end:Memory
         AND end.id <> $originId
-        AND NOT end.id IN $blacklist  // ◀ NEW: Exclude blacklisted IDs
+        AND NOT end.id IN $blacklist
 
         // Order by depth and apply your limit
         ORDER BY depth
