@@ -205,7 +205,7 @@ class DMAWebUI:
                                     s += "    " + line + "  \n"
                             else:
                                 s += f"{q}\n"
-                        yield StreamingResponseChunk(type="query", content=s)
+                        yield StreamingResponseChunk(type="query", content=s, status=update.message)
                     case PipelineStatus.RETRIEVAL_UPDATE:
                         s = "Retrieving information...  \n"
                         step: RetrievalStep = update.retrieval_step
@@ -219,13 +219,15 @@ class DMAWebUI:
                             s += r_lines[0] + "  \n"
                             for line in r_lines[1:]:
                                 s += "    " + line + "  \n"
-                        yield StreamingResponseChunk(type="retrieval", content=s)
+                        yield StreamingResponseChunk(type="retrieval", content=s, status=update.message)
                     case PipelineStatus.MEMORY_UPDATE:
-                        if update.message:
-                            yield StreamingResponseChunk(type="status", content=None, status=update.message)
+                        count_positive = len(update.retrieval_step.results)
+                        count_negative = len(update.retrieval_step.rejected_results)
+                        # TODO: improve memory update messages
+                        s = f"Reinforcing {count_positive} memories and weakening {count_negative} irrelevant memories."
+                        yield StreamingResponseChunk(type="feedback-update", content=s, status=update.message)
                     case PipelineStatus.SUMMARY_UPDATE:
-                        if update.message:
-                            yield StreamingResponseChunk(type="status", content=None, status=update.message)
+                        yield StreamingResponseChunk(type="summary", content=f"Summarization: {update.retrieval_step.summary}", status=update.message)
                     case _:
                         # for other statuses, just send status if message is present
                         if update.message:

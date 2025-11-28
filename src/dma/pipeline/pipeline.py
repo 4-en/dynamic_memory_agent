@@ -45,7 +45,7 @@ class Pipeline:
     
     """
 
-    def __init__(self) -> None:   
+    def __init__(self, config:DmaConfig=None) -> None:   
         """
         Initialize the pipeline.
 
@@ -87,7 +87,7 @@ class Pipeline:
             logging.warning(f"Could not load default retriever: {e}. Retriever is not set. Proceeding without retriever.")
             self.retriever = None
 
-        self.config = get_config()
+        self.config = config or get_config()
         
         
 
@@ -569,6 +569,16 @@ class Pipeline:
                 logging.debug("No results found, stopping retrieval.")
                 retrieval.done = True
             else:
+                
+                current_step += 1
+                self._update_progress(
+                    progress_callback,
+                    PipelineStatus.RETRIEVAL_UPDATE,
+                    "Initial memories retrieved.",
+                    current_step / total_steps,
+                    retrieval_step=last_step
+                )
+                
                 # use evaluator to filter out memories and summarize
                 self._update_progress(
                     progress_callback,
@@ -578,6 +588,7 @@ class Pipeline:
                     retrieval_step=last_step
                 )
                 evaluation: Evaluation = self.evaluator.evaluate_memories(
+                    retrieval,
                     last_step,
                     conversation
                 )
@@ -588,6 +599,13 @@ class Pipeline:
                     summary = evaluation.summary
                     if summary and summary.strip() != "":
                         last_step.summary = summary
+                        self._update_progress(
+                            progress_callback,
+                            PipelineStatus.SUMMARY_UPDATE,
+                            "Appending retrieval summary to conversation...",
+                            current_step / total_steps,
+                            retrieval_step=last_step
+                        )
                     else:
                         print("No summary generated for retrieval step. Weird.")
                         
@@ -628,14 +646,6 @@ class Pipeline:
                         logging.debug("No relevant memories found, stopping retrieval.")
                         retrieval.done = True
             
-            current_step += 1
-            self._update_progress(
-                progress_callback,
-                PipelineStatus.RETRIEVAL_UPDATE,
-                "Retrieval completed.",
-                current_step / total_steps,
-                retrieval_step=last_step
-            )
             
             # TODO: add step summary generation here?
 

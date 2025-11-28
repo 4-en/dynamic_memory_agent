@@ -169,6 +169,9 @@ class Retriever:
         blacklisted_memory_ids = list(blacklisted_memory_ids)
         
         # get context expanded results for top 3 direct results
+        # TODO: consider using memories from previous retrieval steps as well for expansion
+        # since these have already been deemed relevant
+        # (or mix of previous retrievals and direct results)
         TOP_DIRECT_FOR_EXPANSION = 3
         all_expensions = []
         for direct_result in direct_results[:TOP_DIRECT_FOR_EXPANSION]:

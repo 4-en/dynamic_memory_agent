@@ -182,7 +182,7 @@ class QueryGenerator:
         formats = (
             "The response should be a JSON object with the following structure:\n"
             "{\n"
-            "  \"is_user_prompt_unclear\": bool, # true if the user's prompt is unclear/nonsense and needs clarification, false otherwise\n"
+            "  \"is_user_prompt_unclear\": bool, # true/1 if the user's prompt is unclear/nonsense and needs clarification, false/0 otherwise\n"
             "  \"queries\": [ # a list of queries that will be used to find more relevant information to answer the user's prompt\n"
             "    {\n"
             "      \"query\": str, # a query in form of a question to retrieve relevant memories, as verbose as possible\n"

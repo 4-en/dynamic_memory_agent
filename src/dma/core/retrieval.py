@@ -372,7 +372,7 @@ class Retrieval:
         self.final_summary = "Okay, this is what I know:\n"
         memory_summary = ""
         for step in self.steps:
-            if step.is_pre_query and len(self.steps) > 1:
+            if step.is_pre_query and len(self.steps) > 1 and len(self.steps[1].queries) > 0:
                 # skip pre-query step summaries if there is a main step
                 continue
             if step.summary:

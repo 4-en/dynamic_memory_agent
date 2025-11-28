@@ -78,7 +78,7 @@ Reasoning and summary about what kind of information we need and then the releva
     ],
     "summary_str": "<string>", # summary of all the relevant information from the memories with relevance score 2 or 3, structured as a coherent explanation
     "missing_keywords_list": ["<string>", ...], # (optional) list of important keywords or entities that were not found in any of the memories but are relevant to the query
-    "fully_answered_bool": <bool> # (optional) indicates if the query and user prompt has been fully answered based on the memories. If false, it means more information is needed.
+    "fully_answered_bool": <bool> # (optional, true or false) indicates if the query and user prompt has been fully answered based and no more research is needed. If false, it means more information is needed.
 }
 """
 
@@ -91,6 +91,10 @@ Consider the following when evaluating:
 - Direct relevance to the query
 - Usefulness of the information in the memory for constructing a response
 - Coherence and clarity of the memory content
+
+After evaluating all memories, provide a summary of the relevant information that can be used to answer the query. Make sure to include and repeat all relevant details from the memories in the summary directly.
+Don't reference the memories by their IDs in the summary; just write a coherent explanation.
+If a previous summary is available, fully incorporate that information into your evaluation and summary, so that the new summary serves as an updated and comprehensive overview.
 
 After the reasoning step (inside <think></think> tags), immediately provide the JSON response without any additional text.
 Make sure to strictly follow the specified JSON format.
@@ -165,6 +169,7 @@ class MemoryEvaluator:
 
     def evaluate_memories(
         self,
+        retrieval: Retrieval,
         retrieval_step: RetrievalStep,
         conversation: Conversation
     ) -> Evaluation:
@@ -173,8 +178,8 @@ class MemoryEvaluator:
         
         Parameters
         ----------
-        memories : list[Memory]
-            List of memories to evaluate.
+        retrieval : Retrieval
+            The retrieval containing the memories.
         retrieval_step : RetrievalStep
             The retrieval step containing the query.
         conversation : Conversation
@@ -192,7 +197,7 @@ class MemoryEvaluator:
         
         memories = [mem.memory for mem in memories]
         
-        prompt_conversation = self._build_prompt(memories, retrieval_step, conversation)
+        prompt_conversation = self._build_prompt(memories, retrieval_step, conversation, retrieval)
         
         reply_beginning = (
             "Okay, first I should examine what the conversation and the provided queries are about"
@@ -283,7 +288,8 @@ class MemoryEvaluator:
         self,
         memories: list[Memory],
         retrieval_step: RetrievalStep,
-        conversation: Conversation
+        conversation: Conversation,
+        retrieval: Retrieval
     ) -> Conversation:
         """
         Build the prompt conversation for memory evaluation.
@@ -296,6 +302,8 @@ class MemoryEvaluator:
             The retrieval step containing the query.
         conversation : Conversation
             The conversation context.
+        retrieval : Retrieval
+            The full retrieval containing previous queries and memories.
             
         Returns
         -------
@@ -347,6 +355,12 @@ class MemoryEvaluator:
             "queries": queries_data,
             "memories": memories_data
         }
+        
+        if retrieval and len(retrieval.steps) > 1:
+            previous_step = retrieval.steps[-2]
+            previous_summary = previous_step.summary
+            if previous_summary:
+                parent["previous_summary"] = previous_summary
         
         messages.append(Message(
             role=Role.USER,

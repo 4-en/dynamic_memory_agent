@@ -99,6 +99,51 @@ window.addEventListener('load', async () => {
         addMessage('assistant', 'response', 'Sorry, I couldn\'t load the chat history.');
     }
 });
+var _last_status_update = 0;
+const STATUS_UPDATE_INTERVAL = 1000; // milliseconds
+var status_queue = [];
+async function process_status_queue() {
+    while (status_queue.length > 0) {
+        // wait for enough time to pass
+        const now = Date.now();
+        let time_since_last = now - _last_status_update;
+        if (time_since_last < STATUS_UPDATE_INTERVAL) {
+            // wait the remaining time
+            const wait_time = STATUS_UPDATE_INTERVAL - time_since_last;
+            await new Promise(resolve => setTimeout(resolve, wait_time));
+        }
+        const item = status_queue.shift();
+        item.element.textContent = item.status;
+        _last_status_update = Date.now();
+    }
+}
+function update_status_message(element, new_status) {
+
+    // if the status is the same as current, do nothing
+    if (element.textContent === new_status) {
+        return;
+    }
+
+    // if the status is already in the queue, also do nothing
+    for (const item of status_queue) {
+        if (item.element === element && item.status === new_status) {
+            return;
+        }
+    }
+
+    // change the status message text if enough time has passed, otherwise add to a queue
+    const now = Date.now();
+    if (now - _last_status_update > STATUS_UPDATE_INTERVAL) {
+        element.textContent = new_status;
+        _last_status_update = now;
+    } else {
+        status_queue.push({ element: element, status: new_status });
+        if (status_queue.length === 1) {
+            // start processing the queue
+            process_status_queue();
+        }
+    }
+}
 
 // --- Event 2: Handle Form Submission ---
 var llm_mode = 'default';
@@ -211,7 +256,7 @@ chatForm.addEventListener('submit', async (event) => {
 
                 if (chunk.status) {
                     // handle status updates
-                    statusMessage.textContent = chunk.status;
+                    update_status_message(statusMessage, chunk.status);
                 }
 
                 if (!chunk.content || chunk.content.length === 0) {
