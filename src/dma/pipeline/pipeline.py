@@ -5,7 +5,7 @@ from dma.core.retrieval import RetrievalStep, RetrievalQuery, Retrieval, MemoryR
 from dma.config import DmaConfig, get_config
 
 from dma.query import QueryGenerator
-from dma.generator import LowLevelLlamaCppGenerator
+from dma.generator import LowLevelLlamaCppGenerator, BaseGenerator
 from dma.memory import Retriever, MemoryEvaluator, Evaluation
 import os
 from dotenv import load_dotenv
@@ -45,7 +45,13 @@ class Pipeline:
     
     """
 
-    def __init__(self, config:DmaConfig=None) -> None:   
+    def __init__(
+        self, 
+        config:DmaConfig=None,
+        generator:BaseGenerator=None,
+        query_generator:QueryGenerator=None,
+        retriever:Retriever=None,
+        evaluator:MemoryEvaluator=None) -> None:   
         """
         Initialize the pipeline.
 
@@ -61,28 +67,21 @@ class Pipeline:
                 ↓
             Retriever  (Fetches relevant information, if needed)
                 ↓
-            Generator  (LLM generates response)
+            Evaluator  (Rates, filters, and summarizes retrieved information)
+                ↓
+            Generator  (LLM generates response) | loop back to QueryGenerator
                 ↓
             Output: Message | None
 
 
         """
         
-        # load environment variables from .env file in root directory
-        dotenv_path = "./.env"
-        if not os.path.exists(dotenv_path):
-            logging.info(f"Creating .env file in {os.path.abspath(dotenv_path)}")
-            with open(dotenv_path, "w") as f:
-                f.write("# Add environment variables here")
-        else:
-            load_dotenv(dotenv_path)
-        
         # placeholders for components
-        self.generator = LowLevelLlamaCppGenerator()
-        self.query_generator = QueryGenerator(self.generator)
-        self.evaluator = MemoryEvaluator(self.generator)
+        self.generator = generator or LowLevelLlamaCppGenerator()
+        self.query_generator = query_generator or QueryGenerator(self.generator)
+        self.evaluator = evaluator or MemoryEvaluator(self.generator)
         try:
-            self.retriever = Retriever()
+            self.retriever = retriever or Retriever()
         except Exception as e:
             logging.warning(f"Could not load default retriever: {e}. Retriever is not set. Proceeding without retriever.")
             self.retriever = None
@@ -100,7 +99,7 @@ class Pipeline:
         This method can be used to save pipeline components to disk.
         """
         
-        self.config.save(self.root_dir+"/config.txt")
+        self.config.save()
 
     def add_memories(self, memories: list[Memory]) -> None:
         """
