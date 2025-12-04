@@ -39,7 +39,9 @@ class Pipeline:
             ↓
         Retriever  (Fetches relevant information, if needed)
             ↓
-        Generator  (LLM generates response)
+        Evaluator  (Rates, filters, and summarizes retrieved information)
+            ↓
+        Generator  (LLM generates response) | loop back to Evaluator
             ↓
         Output: Message | None
     
