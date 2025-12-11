@@ -114,6 +114,16 @@ class Retriever:
         embedding_results = [self.graph_memory.query_memories_by_vector(embedding, top_k=TOP_K_QUERY_RESULTS) for embedding in embeddings]
         entity_results = self.graph_memory.query_memories_by_entities(sorted_entities, limit=TOP_K_QUERY_RESULTS)
         
+        # r = []
+        # while len(r) < top_k:
+        #     for embed_list in embedding_results:
+        #         if len(embed_list) > 0:
+        #             r.append(embed_list.pop(0))
+        #             if len(r) >= top_k:
+        #                 break
+                    
+        # return r
+        
         # MIN_ENTITY_SCORE = max(1.0, len(entities) / 4.0)
         MIN_SIMILARITY = 0.5
         
@@ -130,19 +140,23 @@ class Retriever:
         # to list
         all_memory_results = list(all_memory_results.values())
         
-        print(f"Initial n results before filtering: {len(all_memory_results)}")
+        # print(f"Initial n results before filtering: {len(all_memory_results)}")
         
         # filter out blacklisted memories
         all_memory_results = [mem for mem in all_memory_results if not mem.id in blacklisted_memory_ids]
         
-        print(f"n results after blacklisting: {len(all_memory_results)}")
+        # print(f"n results after blacklisting: {len(all_memory_results)}")
             
                 
         # 3. rerank results based on entity scales and other factors
         # make sure to prioritize embedding results if present
         ranked_results = self._rank_memories(all_memory_results, entities, embeddings)
         
-        print(f"Retriever: Ranked {len(ranked_results)} memories.")
+        # print(f"Retriever: Ranked {len(ranked_results)} memories.")
+        
+        return ranked_results[:top_k]
+    
+        # disable expansion for now
         
         # use 60:40 split between direct results and context expanded results
         if top_k == None:
@@ -208,14 +222,14 @@ class Retriever:
             
         final_results = direct_results + expanded_results
         
-        print(f"Retriever: Retrieved {len(final_results)} memories ({len(direct_results)} direct, {len(expanded_results)} expanded).")
+        # print(f"Retriever: Retrieved {len(final_results)} memories ({len(direct_results)} direct, {len(expanded_results)} expanded).")
         
         return final_results
         
 
         
     @staticmethod
-    def _get_dropoff_functions(memories: list[Memory], MAX_TIME_DROPOFF=0.5, MAX_ACCESS_DROPOFF=0.5)->tuple[callable, callable]:
+    def _get_dropoff_functions(memories: list[Memory], MAX_TIME_DROPOFF=0.2, MAX_ACCESS_DROPOFF=0.2)->tuple[callable, callable]:
         """
         Get dropoff functions for time and access feedback.
         
@@ -290,9 +304,9 @@ class Retriever:
         ranked_memories = []
         memory_pool = memories.copy()
         similarity_cache = {}
-        EMBEDDING_MULTIPLIER = 2.0 + len(entities) / 2.0  # weight embeddings more if there are few entity matches
+        EMBEDDING_MULTIPLIER = max(1, len(entities) * 0.75) #/ 2.0  # weight embeddings more if there are few entity matches
         # multiplier doesn't matter that much, since we apply falloff anyway
-        EMBEDDING_MIN_SIMILARITY = 0.75
+        EMBEDDING_MIN_SIMILARITY = 0.70
         FALLOFF_RATE = 0.8
         calc_falloff = lambda n: FALLOFF_RATE ** n  # exponential falloff based on n uses
         entity_counts = {entity: 0 for entity in entities} # n of times entity has been used in ranked memories
@@ -302,7 +316,7 @@ class Retriever:
         
         while len(memory_pool) > 0:
             best_memory = None
-            best_score = 0.0
+            best_score = -99999999.0
             for memory in memory_pool:
                 score = 0.0
                 # embedding similarity
@@ -351,7 +365,7 @@ class Retriever:
                 for i, query_embedding in enumerate(embeddings):
                     similarity = similarity_cache[f"{best_memory.id}_{i}"]
                     if similarity >= EMBEDDING_MIN_SIMILARITY:
-                        embedding_sum[i] += similarity
+                        embedding_sum[i] += similarity**2
                         
         return ranked_memories
         

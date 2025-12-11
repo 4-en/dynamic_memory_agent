@@ -54,6 +54,10 @@ class DmaConfig(Config):
     cc_retrieval_time_relevance: str = "Whether to consider time relevance in retrieval."
     retrieval_time_relevance: bool = False
     
+    # Evaluation configuration
+    cc_dynamic_learning: str = "Whether to enable dynamic learning during evaluation."
+    enable_dynamic_learning: bool = True
+    
 
 _config_instance: DmaConfig = None
 def get_config() -> DmaConfig:

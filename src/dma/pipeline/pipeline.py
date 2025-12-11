@@ -399,8 +399,8 @@ class Pipeline:
         )
         
         # debug: print conversation
-        for msg in conversation.messages:
-            print(f"{msg.role.value}: {msg.message_text}")
+        #for msg in conversation.messages:
+        #    print(f"{msg.role.value}: {msg.message_text}")
 
         # Generate response
         # print(f"Request: {conversation}")
@@ -425,7 +425,7 @@ class Pipeline:
         if retrieval and len(retrieval.steps) > 0:
             source_memories = []
             for step in retrieval.steps:
-                if step.is_pre_query:
+                if step.is_pre_query and len(retrieval.steps) > 1:
                     continue
                 for result in step.results:
                     source_memories.append(result.memory)
@@ -622,10 +622,11 @@ class Pipeline:
                     last_step.results = relevant_results
                     last_step.rejected_results = filtered_out_results
                     
-                    self.retriever.give_query_feedback(
-                        last_step,
-                        evaluation
-                    )
+                    if self.config.enable_dynamic_learning:
+                        self.retriever.give_query_feedback(
+                            last_step,
+                            evaluation
+                        )
                     
                     if evaluation.fully_answered:
                         retrieval.mark_satisfactory()

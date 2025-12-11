@@ -436,4 +436,9 @@ class Memory:
             current_time = time()
         self.total_accesses += score
         self.last_access = current_time
+        
+    def __eq__(self, value):
+        if not isinstance(value, Memory):
+            return False
+        return self.id == value.id
     

@@ -21,6 +21,7 @@ help:
 	@echo "make build        - Build all services"
 	@echo "make rebuild      - Rebuild without cache"
 	@echo "make up           - Start in background"
+	@echo "make stop         - Stop containers without removing"
 	@echo "make down         - Stop and remove containers, networks"
 	@echo "make ps           - List running services"
 	@echo "make logs         - Tail all logs"
@@ -47,6 +48,9 @@ rebuild:
 
 up:
 	$(DC) -p $(PROJECT_NAME) $(COMPOSE_FILES) up -d $(ARGS)
+
+stop:
+	$(DC) -p $(PROJECT_NAME) $(COMPOSE_FILES) stop
 
 down:
 	$(DC) -p $(PROJECT_NAME) $(COMPOSE_FILES) down $(ARGS)
@@ -151,6 +155,12 @@ build-gpu: ; $(MAKE) build VARIANT=gpu
 rebuild-cpu: ; $(MAKE) rebuild VARIANT=cpu
 rebuild-gpu: ; $(MAKE) rebuild VARIANT=gpu
 up-cpu:    ; $(MAKE) up VARIANT=cpu
+stop-cpu:  ; $(MAKE) stop VARIANT=cpu
+stop-gpu:  ; $(MAKE) stop VARIANT=gpu
+start-cpu: ; $(MAKE) start VARIANT=cpu
+start-gpu: ; $(MAKE) start VARIANT=gpu
+restart-cpu: ; $(MAKE) restart VARIANT=cpu
+restart-gpu: ; $(MAKE) restart VARIANT=gpu
 up-gpu:    ; $(MAKE) up VARIANT=gpu
 down-cpu:  ; $(MAKE) down VARIANT=cpu
 down-gpu:  ; $(MAKE) down VARIANT=gpu

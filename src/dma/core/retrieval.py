@@ -369,13 +369,24 @@ class Retrieval:
         # TODO: if we have queries but no results, we should indicate that
         # we shouldn't make guesses and instead say we have no information
         
-        self.final_summary = "Okay, this is what I know:\n"
+        USE_SUMMARY = True
+        LAST_SUMMARY_ONLY = True
+        
+        if LAST_SUMMARY_ONLY and len(self.steps) > 0 and self.steps[-1].summary:
+            self.final_summary = ("Okay, here is a summary of what I know from my memory:\n" +
+                                  self.steps[-1].summary +
+                                  "\nThis is all I know. I should think about the relevant information and then respond accordingly.")
+
+            self._last_summary_count = total_memories
+            return self.final_summary
+        
+        self.final_summary = "Okay, this is what I know from my memory:\n"
         memory_summary = ""
         for step in self.steps:
             if step.is_pre_query and len(self.steps) > 1 and len(self.steps[1].queries) > 0:
                 # skip pre-query step summaries if there is a main step
                 continue
-            if step.summary:
+            if step.summary and USE_SUMMARY:
                 memory_summary += f"{step.summary}\n"
             else:
                 for result in step.results:
@@ -384,7 +395,7 @@ class Retrieval:
         if memory_summary == "":
             return None
         self.final_summary += memory_summary
-        self.final_summary += "\nI should use think about the relevant information and then respond accordingly."
+        self.final_summary += "\nThis was all I know. I should think about the relevant information and then respond accordingly."
                     
         self._last_summary_count = total_memories
         
