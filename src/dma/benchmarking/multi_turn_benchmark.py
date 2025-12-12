@@ -87,6 +87,10 @@ for model_name, results in multi_turn_results.items():
             continue
         if not isinstance(scores, list):
             continue
+        if len(scores) == 0:
+            continue
+        if not all(isinstance(score, (int, float)) for score in scores):
+            continue
         average_score = sum(scores) / len(scores) if scores else 0
         print(f"{name}: Average Score = {average_score:.2f} over {len(scores)} cases")
         avg_scores[name+"_average"] = average_score

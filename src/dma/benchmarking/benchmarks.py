@@ -91,7 +91,8 @@ class SingleTurnBenchmark:
                     model=self.eval_model,
                     evaluation_params=[
                         LLMTestCaseParams.INPUT,
-                        LLMTestCaseParams.ACTUAL_OUTPUT],
+                        LLMTestCaseParams.ACTUAL_OUTPUT,
+                        LLMTestCaseParams.EXPECTED_OUTPUT],
                     evaluation_steps=[
                         "Check whether the facts in 'actual output' contradict any facts in 'expected output'",
                         "Lightly penalize omissions of detail, focusing on the main idea",
@@ -105,7 +106,9 @@ class SingleTurnBenchmark:
             }
             
             
-            results[model_name] = {}
+            results[model_name] = {
+                "details": [],
+            }
             # results[model_name]["test_cases"] = []
             for metric_name in metrics.keys():
                 results[model_name][metric_name] = []
@@ -127,17 +130,31 @@ class SingleTurnBenchmark:
                 )
                 
                 
+                details = {
+                    "Question": golden.input,
+                    "Input Context": golden.context,
+                    "Expected Answer": golden.expected_output,
+                    "Actual Answer": actual_output,
+                    "Retrieved Context": context,
+                    "Generation Time (s)": f"{answer_generation_duration:.2f}"
+                }
+                
+                
                 try:
                     for metric_name, metric in metrics.items():
                         metric.measure(test_case)
                         score = metric.score
                         print(f"Metric: {metric_name}, Score: {score}")
                         results[model_name][metric_name].append(score)
+                        details[metric_name + "_score"] = score
+                        details[metric_name + "_reason"] = metric.reason
                 except Exception as e:
                     print(f"Error measuring metric {metric_name} for model {model_name}: {e}")
                     time.sleep(10)  # brief pause before continuing
                     continue
                 
+                
+                results[model_name]["details"].append(details)
                 test_cases.append(test_case)
                 #results[model_name]["test_cases"].append(test_case)
                 generation_time += answer_generation_duration

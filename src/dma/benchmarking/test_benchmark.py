@@ -63,9 +63,10 @@ if not found_cached or not USE_CACHE:
         with open(golden_path, "w") as f:
             f.write(golden.model_dump_json())
 
-
-single_turn_benchmark.goldens = single_turn_benchmark.goldens[:19]  # limit to first 3 for testing
-llms = [dyn_mem_llm, baseline_llm, baseline_rag_llm]
+import random
+random.seed(420)
+single_turn_benchmark.goldens = random.sample(single_turn_benchmark.goldens, 23)  # limit to first 3 for testing
+llms = [dyn_mem_llm]
 single_turn_results = single_turn_benchmark.run(llms=llms)
 
 # output results
@@ -76,6 +77,10 @@ for model_name, results in single_turn_results.items():
         if name == "test_cases":
             continue
         if not isinstance(scores, list):
+            continue
+        if len(scores) == 0:
+            continue
+        if not all(isinstance(score, (int, float)) for score in scores):
             continue
         average_score = sum(scores) / len(scores) if scores else 0
         print(f"{name}: Average Score = {average_score:.2f} over {len(scores)} cases")
