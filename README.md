@@ -9,12 +9,14 @@ they are trained in a completely separate step, requiring often millions of trai
 their weights, which in turn require powerful server clusters to operate. While approaches like
 Retrieval-Augmented Generation (RAG) or more advanced graph-based techniques exist, they
 can still suffer from a lack of transparency, efficient retrieval or sufficient flexibility.
+
 Building on the concept of RAG and other graph-based augmentation techniques, this thesis
 proposes a dynamic learning memory as the core knowledge base for LLM applications. Using
 a hybrid retrieval approach that utilizes both semantic similarity and Named-entity recognition
 (NER), this system transforms an existing static knowledge base into a dynamic memory, which
 adjusts itself over time, based on a self-feedback mechanism and the corresponding ranking and
 filtering algorithm.
+
 The modular pipeline can be used as a library to enable agentic and natural language use
 cases that target local or consumer-oriented systems. It serves as a simple and ready to use
 library that can build a memory based on an existing knowledge base and use it to generate
