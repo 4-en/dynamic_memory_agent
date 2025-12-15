@@ -92,7 +92,8 @@ make stop
 ## Tech Stack
 - **Languages/Frameworks:** Python, PyTorch, Hugging Face Transformers, llama.cpp
 - **Memory Backend:** Neo4j (graph database)
-- **Models:** Open-source LLMs (~7B–40B parameters, Qwen3)
+- **Models:** Open-source LLMs compatible with llama.cpp (~7B–40B parameters, Qwen3)
+- **Web UI API:** FastAPI
 
 ---
 
