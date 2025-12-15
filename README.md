@@ -1,6 +1,5 @@
 # Dynamic Learning Memory System for AI Agents
 
-## Abstract
 Large Language Model (LLM)-based systems have demonstrated remarkable progress in
 natural language understanding and generation, yet their ability to learn and adapt during
 live operation remains severely limited. Most current systems operate without a persistent
