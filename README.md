@@ -1,22 +1,48 @@
 # Dynamic Learning Memory System for AI Agents
 
+Large Language Model (LLM)-based systems have demonstrated remarkable progress in
+natural language understanding and generation, yet their ability to learn and adapt during
+live operation remains severely limited. Most current systems operate without a persistent
+memory, preventing them from refining knowledge or improving behaviour over time. Instead,
+they are trained in a completely separate step, requiring often millions of training steps to adjust
+their weights, which in turn require powerful server clusters to operate. While approaches like
+Retrieval-Augmented Generation (RAG) or more advanced graph-based techniques exist, they
+can still suffer from a lack of transparency, efficient retrieval or sufficient flexibility.
+
+Building on the concept of RAG and other graph-based augmentation techniques, this thesis
+proposes a dynamic learning memory as the core knowledge base for LLM applications. Using
+a hybrid retrieval approach that utilizes both semantic similarity and Named-entity recognition
+(NER), this system transforms an existing static knowledge base into a dynamic memory, which
+adjusts itself over time, based on a self-feedback mechanism and the corresponding ranking and
+filtering algorithm.
+
+The modular pipeline can be used as a library to enable agentic and natural language use
+cases that target local or consumer-oriented systems. It serves as a simple and ready to use
+library that can build a memory based on an existing knowledge base and use it to generate
+grounded and source-based responses. The modules can also be used separately, making the
+system highly customizable. The library also comes with a basic web interface, that can be
+used to run the pipeline on local networks as a chat assistant. It shows improvements over non-
+learning and RAG-only baselines in various benchmarks, while operating within the constraints
+of consumer-grade hardware.
+
 ## Overview
 This project is a proof-of-concept implementation of a **graph-based dynamic learning memory system** for LLM-based agents, designed with smaller, locally deployable models in mind.  
 
 The system enables an agent to:
-- Form structured memories from user interactions
-- Retrieve relevant knowledge efficiently
+- Build a graph memory using an existing knowledge base
+- Retrieve relevant knowledge efficiently using hybrid retrieval
 - Update or prune stored information when necessary
 - Produce responses grounded in verifiable sources
 
 The goal is to improve accuracy, consistency, and transparency compared to stateless or RAG-only approaches, while remaining efficient on consumer-grade hardware.
 
+While designed to be used as a library, it also includes a simple web-ui and can run as a standalone application via Docker.
 ---
 
-## Installation
+## Installation (Standalone)
 ### Requirements
 - NVIDIA GPU with CUDA support (for LLM inference)
-- NVidia Container Toolkit and drivers installed
+- NVIDIA Container Toolkit and drivers installed
 - GPU-enabled Docker runtime
 - Docker and Docker Compose
 
@@ -31,27 +57,26 @@ The goal is to improve accuracy, consistency, and transparency compared to state
    make build
    ```
 
-### Run Agent
+### Run Web UI
 Start the agent with:
 ```bash
 make up
 ```
 
-### Build memory from data (optional)
-To initialize the memory graph from a dataset (e.g., a game wiki):
+### Stopping
+To stop (without wiping the Neo4j container):
 ```bash
-make build_memory DATASET_PATH=path/to/dataset.jsonl
+make stop
 ```
 
 ## Features
-- **Graph-based memory storage** (Neo4j planned, pluggable backend)
-- **Hybrid retrieval**: semantic similarity (FAISS or custom), recency, and usage importance
-- **Update & pruning** to handle contradictions and stale information
-- **Grounded generation** with provenance tracking
+- **Graph-based memory storage** (Neo4j)
+- **Hybrid retrieval**: semantic similarity and entity-based searched, with recency, and feedback data for ranking
+- **Update & pruning** to prioritize relevant information and improve future retrieval results
+- **Grounded generation** with source tracking
 - **Interfaces**:
-  - CLI (minimum)
-  - Optional: web interface, graph visualisation, memory inspection
-- **Debug modes** to inspect retrieved entries, metadata, and updates
+  - CLI
+  - Basic web ui
 
 ---
 
@@ -67,16 +92,16 @@ make build_memory DATASET_PATH=path/to/dataset.jsonl
 ## Tech Stack
 - **Languages/Frameworks:** Python, PyTorch, Hugging Face Transformers, llama.cpp
 - **Memory Backend:** Neo4j (graph database)
-- **Retrieval:** FAISS or lightweight custom search
-- **Models:** Open-source LLMs (~7B–40B parameters)
+- **Models:** Open-source LLMs compatible with llama.cpp (~7B–40B parameters, Qwen3)
+- **Web UI API:** FastAPI
 
 ---
 
 ## Evaluation
-Planned evaluation includes:
-- **Datasets:** public general knowledge + custom domain-specific (e.g., game wiki data)
+Planned evaluation with LLM-as-a-judge includes:
+- **Datasets:** custom domain-specific (e.g., game wiki data)
 - **Baselines:** non-learning agent, RAG-only agent
-- **Metrics:** accuracy, consistency, latency, retrieval quality, memory growth
+- **Metrics:** correctness, faithfulness, halucination
 
 ---
 
