@@ -36,18 +36,31 @@ The system enables an agent to:
 
 The goal is to improve accuracy, consistency, and transparency compared to stateless or RAG-only approaches, while remaining efficient on consumer-grade hardware.
 
-While designed to be used as a library, it also includes a simple web-ui and can run as a standalone application via Docker.
 
 ---
 
-## Installation (Standalone with Docker)
-### Requirements
+## Usage
+While designed to be used as a library, it also includes a simple web-ui and can run as a standalone application via Docker. 
+The provided Docker setup is not required, but it simplifies the setup for Neo4j and the Python environment.
+
+To use a custom Neo4j instance, set the following environment variables or set them in the constructor of the Neo4jMemory class:
+
+```
+NEO4J_URI
+NEO4J_USER
+NEO4J_PASSWORD
+NEO4J_DATABASE
+```
+
+### Installation (Standalone with Docker)
+
+#### Requirements
 - NVIDIA GPU with CUDA support (for LLM inference)
 - NVIDIA Container Toolkit and drivers installed
 - GPU-enabled Docker runtime
 - Docker and Docker Compose
 
-### Setup
+#### Setup
 1. Clone the repository:
    ```bash
    git clone
@@ -58,17 +71,34 @@ While designed to be used as a library, it also includes a simple web-ui and can
    make build
    ```
 
-### Run Web UI
+#### Run Web UI
 Start the agent with:
 ```bash
 make up
 ```
 
-### Stopping
+#### Stopping
 To stop (without wiping the Neo4j container):
 ```bash
 make stop
 ```
+
+### As a library
+
+```python
+from dma.pipeline import Pipeline
+from dma.core import Message, Conversation
+
+pipe = Pipeline()
+
+message = Message("What's the distance between Earth and Mars?")
+conversation = Conversation([message])
+
+response = pipe.generate(conversation)
+
+print(response.message_text[:100]+"..." )
+```
+
 
 ## Features
 - **Graph-based memory storage** (Neo4j)
