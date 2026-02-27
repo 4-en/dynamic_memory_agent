@@ -36,6 +36,8 @@ The system enables an agent to:
 
 The goal is to improve accuracy, consistency, and transparency compared to stateless or RAG-only approaches, while remaining efficient on consumer-grade hardware.
 
+### Disclaimer
+This project is a proof-of-concept prototype. It is first and foremost a research project and not production ready.
 
 ---
 
