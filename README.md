@@ -37,9 +37,10 @@ The system enables an agent to:
 The goal is to improve accuracy, consistency, and transparency compared to stateless or RAG-only approaches, while remaining efficient on consumer-grade hardware.
 
 While designed to be used as a library, it also includes a simple web-ui and can run as a standalone application via Docker.
+
 ---
 
-## Installation (Standalone)
+## Installation (Standalone with Docker)
 ### Requirements
 - NVIDIA GPU with CUDA support (for LLM inference)
 - NVIDIA Container Toolkit and drivers installed
@@ -100,7 +101,7 @@ make stop
 ## Evaluation
 Planned evaluation with LLM-as-a-judge includes:
 - **Datasets:** custom domain-specific (e.g., game wiki data)
-- **Baselines:** non-learning agent, RAG-only agent
+- **Baselines:** non-learning agent, RAG-only agent, pure LLM
 - **Metrics:** correctness, faithfulness, halucination
 
 ---
