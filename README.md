@@ -41,7 +41,8 @@ The goal is to improve accuracy, consistency, and transparency compared to state
 
 ## Usage
 While designed to be used as a library, it also includes a simple web-ui and can run as a standalone application via Docker. 
-The provided Docker setup is not required, but it simplifies the setup for Neo4j and the Python environment.
+The provided Docker setup is not required, but it simplifies the setup for Neo4j and the Python environment. 
+Note that this still initializes an empty Memory database. You probably want to initialize it via `python -m dma build-memory`.
 
 To use a custom Neo4j instance, set the following environment variables or set them in the constructor of the Neo4jMemory class:
 
