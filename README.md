@@ -178,7 +178,7 @@ connecting them manually, allowing for greater flexibility and customization.
 
 ### Tech Stack
 
-- **Languages/Frameworks:** Python, PyTorch, Hugging Face Transformers, Sentence-Transformersm spaCy, llama.cpp
+- **Languages/Frameworks:** Python, PyTorch, Hugging Face Transformers, Sentence-Transformersm spaCy, llama.cpp, DeepEval
 - **Memory Backend:** Neo4j (as graph and vector database)
 - **Models:** Open-source LLMs compatible with llama.cpp (~7B–40B parameters, Qwen3)
 - **Web UI API:** FastAPI
@@ -186,10 +186,34 @@ connecting them manually, allowing for greater flexibility and customization.
 ---
 
 ## Evaluation
-Planned evaluation with LLM-as-a-judge includes:
-- **Datasets:** custom domain-specific (e.g., game wiki data)
-- **Baselines:** non-learning agent, RAG-only agent, pure LLM
-- **Metrics:** correctness, faithfulness, halucination
+The system was evaluated as a whole. Therefore, it is difficult to isolate the impact of
+individual components on the overall performance. Most parameters and settings were
+not optimized, as this would have required substantial experimentation and benchmarking,
+which was beyond the scope of this due to time and financial constraints. However, the
+benchmarks provide a comprehensive view of the system's capabilities and design. While not
+representing the best result possible, they can be seen as a baseline for future improvements
+and optimizations.
+
+
+### Metrics
+The benchmarks use DeepEval and LLM-as-a-Judge metrics to evaluate answers using different metrics. 
+The questions/scenarios are based on the generated knowledgebase the systems are using, ensuring that every question is answerable using the available context.
+
+These metrics include:
+
+- **Correctness**: Measures whether the answer provided by the system is factually
+correct compared to the expected answer.
+- **Answer Relevancy**: Measures whether the answer is relevant to the user's ques-
+tion, indicating that the system understood the prompt correctly and didn't include
+unnecessary information.
+- **Faithfulness**: Measures whether the answer is supported by the retrieved memories,
+indicating that the system is using the provided context appropriately.
+- **Hallucination**: Measures the frequency of unsupported or fabricated information in
+the system's responses, indicating how often the model generates content not grounded
+in the memory.
+
+### Results
+TODO
 
 ---
 
