@@ -60,15 +60,16 @@ To use a custom Neo4j instance, set the following environment variables or set t
 - Docker and Docker Compose
 
 #### Setup
-1. Clone the repository:
-   ```bash
-   git clone
-    cd dynamic_memory_agent
-    ```
-2. Build using make:
-   ```bash
-   make build
-   ```
+Clone the repository:
+```bash
+git clone
+cd dynamic_memory_agent
+```
+
+Build using make:
+```bash
+make build
+```
 
 #### Run Web UI
 Start the agent with:
