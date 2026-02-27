@@ -45,12 +45,11 @@ The provided Docker setup is not required, but it simplifies the setup for Neo4j
 
 To use a custom Neo4j instance, set the following environment variables or set them in the constructor of the Neo4jMemory class:
 
-```
-NEO4J_URI
-NEO4J_USER
-NEO4J_PASSWORD
-NEO4J_DATABASE
-```
+`NEO4J_URI`
+`NEO4J_USER`
+`NEO4J_PASSWORD`
+`NEO4J_DATABASE`
+
 
 ### Installation (Standalone with Docker)
 
