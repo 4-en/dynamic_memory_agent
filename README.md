@@ -215,7 +215,37 @@ the system's responses, indicating how often the model generates content not gro
 in the memory.
 
 ### Results
-TODO
+Three approaches (DynMem, RAG, base LLM) were evaluated in three different benchmarks. Overall, the results show the proposed system beating the baselines in correctness and also showing improvements on repeated runs due to its self-feedback mechanism.
+
+#### Single Turn Benchmark
+<img width="2400" height="1400" alt="benchmark_results_chart_unsloth_Qwen3-14B-GGUF_Q4_K_M" src="https://github.com/user-attachments/assets/c2f28ff1-cffd-41aa-a991-fdf01d3f21c5" />
+
+#### Multi Turn Benchmark
+<img width="2400" height="1400" alt="benchmark_multiturn" src="https://github.com/user-attachments/assets/9217e01e-d8b3-464a-a152-84e19e066efc" />
+
+#### Learning Benchmark
+<img width="2400" height="1400" alt="learning_benchmark" src="https://github.com/user-attachments/assets/04529770-749d-4fbf-972b-f2ac4eee9ecc" />
+
+### Summary
+The proposed system was successfully implemented as a proof-of-concept prototype, providing a modular pipeline with components for query generation, adaptive retrieval, evaluation, and response generation.
+
+The implemented system shows performance improvements compared to both a non-learning
+baseline and a RAG-only baseline in various benchmarks. The results show that the system
+is generally an improvement over both baselines. However, due to the small scale of the
+testing, as well as the tested dataset, the results should be taken with a grain of salt.
+More extensive testing and benchmarking would be needed to fully understand the capabilities
+and limitations of the system. Additionally, the system was only directly tested against
+simple baselines. Whether or not it is able to compete with current state-of-the-art systems
+remains an open question.
+
+The benchmarking could be improved further by using a more difficult dataset that
+relies more on complex relationships between information, rather just the content itself.
+Additionally, the benchmark process itself could also be improved. Especially the multi-turn-conversation benchmark showed some flaws and did not fully represent the complex
+interaction with a realistic human. Further, due to the possibility of errors and oversights by
+the judge model, future improvements and changes should be measured by a more reliable
+system, at the very least using a stronger model or additional reviews.
+
+
 
 ---
 
