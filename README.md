@@ -112,18 +112,74 @@ print(response.message_text[:100]+"..." )
 
 ---
 
-## Research Objectives
-1. Develop a structured, graph-based memory architecture with rich metadata
-2. Implement adaptive retrieval combining similarity, recency, and usage importance
-3. Design update and pruning strategies for accuracy and efficiency
-4. Integrate memory into an LLM-based agent with CLI and optional UI
-5. Evaluate against non-learning and RAG-only baselines
+## Research Objectives and Questions
+This project aims to design and implement a prototype that is capable of enhancing grounded, source-based generation for LLMs
+running on consumer hardware. At its core, the system should provide functions that can
+improve the accuracy and reliability of LLM-based systems, combined with a simple deployment process that makes it usable for consumers on their local machines. This will be
+realized using a supporting graph-based memory system, capable of retrieving the most relevant information for a given context, and processing it to improve the underlying LLM’s
+generated output. Unlike static systems, it will also include a self-feedback mechanism,
+which can improve the relevance of future results.
+The following research objectives and questions detail the specific goals and questions
+this project seeks to address:
+
+### RO1: System Design
+To design a dynamic, graph-based memory architecture that supports continuous
+knowledge updates and self-feedback loops.
+
+### RO2: System Implementation
+To implement this architecture as a modular, locally deployable Python library
+prototype compatible with consumer-grade hardware.
+
+### RO3: Evaluation
+To evaluate the effectiveness of the system in terms of retrieval accuracy, hallucination
+reduction, and transparency compared to stateless and RAG-only baselines.
+
+### RQ1: Software Architecture
+What is an effective software architecture for a graph-based dynamic memory system
+that is designed to efficiently store, organize and retrieve knowledge extracted from a
+knowledge base during live interactions?
+
+### RQ2: Retrieval Strategy
+How can a hybrid retrieval strategy that combines semantic similarity1, entity recognition, 
+recency, and usage-based importance be implemented to optimize the relevance
+and utility of retrieved context?
+
+### RQ3: Dynamic Improvements
+How can a knowledge based be updated and pruned to automatically and improve
+future results?
+
+### RQ4: Performance Improvements
+To what extent does the implemented proof of concept improve accuracy, consistency,
+and transparency compared to a non-learning baseline and a RAG-only baseline?
 
 ---
 
-## Tech Stack
-- **Languages/Frameworks:** Python, PyTorch, Hugging Face Transformers, llama.cpp
-- **Memory Backend:** Neo4j (graph database)
+## Architecture Overview
+The following sections give a brief overview about how the system is designed and implemented.
+It illustrates the core retrieval loop and the most important technologies and dependencies.
+
+### Dynamic Memory Pipeline
+The core component of the proposed system is a modular pipeline that manages the various
+stages of processing required to generate responses based on user prompts and conversation
+history. The pipeline is responsible for setting up all default components and registering any
+non-standard ones provided by the user. It provides an interface for generating responses
+by allowing users to input prompts and conversation history, and returning the final generated response.
+
+<img width="2588" height="752" alt="pipeline_overview" src="https://github.com/user-attachments/assets/09a1ca79-8caa-4744-b1b7-a9694eca83d5" />
+
+Each component within the pipeline has a specific role, and they interact in a defined
+sequence to achieve the desired functionality. The pipeline directs the flow of data between
+components, controlling the overall process from input to output. While the components
+are designed to work together seamlessly within the pipeline, they are also modular and can
+be used independently or replaced with custom implementations as needed. In addition,
+a custom pipeline could also be created by instantiating the individual components and
+connecting them manually, allowing for greater flexibility and customization.
+
+
+### Tech Stack
+
+- **Languages/Frameworks:** Python, PyTorch, Hugging Face Transformers, Sentence-Transformersm spaCy, llama.cpp
+- **Memory Backend:** Neo4j (as graph and vector database)
 - **Models:** Open-source LLMs compatible with llama.cpp (~7B–40B parameters, Qwen3)
 - **Web UI API:** FastAPI
 
